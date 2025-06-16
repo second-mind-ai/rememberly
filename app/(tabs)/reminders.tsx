@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotesStore } from '@/lib/store';
 import { useReminderStore } from '@/lib/reminderStore';
 import { formatReminderTime, requestNotificationPermissions } from '@/lib/reminders';
-import { Bell, Calendar, Check, Clock, Plus, X, AlertCircle, Volume2, VolumeX, Trash2 } from 'lucide-react-native';
+import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 type Priority = 'low' | 'medium' | 'high';
