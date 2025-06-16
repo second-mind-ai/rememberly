@@ -154,7 +154,7 @@ export default function CreateScreen() {
                 <Icon 
                   size={20} 
                   color={isActive ? '#2563EB' : '#6B7280'} 
-                  strokeWidth={2} 
+                  strokeWidth={2}
                 />
                 <Text style={[styles.tabText, isActive && styles.activeTabText]}>
                   {tab.label}
