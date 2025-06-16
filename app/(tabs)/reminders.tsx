@@ -432,12 +432,8 @@ export default function RemindersScreen() {
                     ]}>
                       {priority.charAt(0).toUpperCase() + priority.slice(1)}
                     </Text>
-                    {priority === 'high' && (
-                      <Volume2 size={16} color={priorityColors[priority].text} strokeWidth={2} />
-                    )}
-                    {priority === 'low' && (
-                      <VolumeX size={16} color={priorityColors[priority].text} strokeWidth={2} />
-                    )}
+                    {priority === 'high' && <Volume2 size={16} color={priorityColors[priority].text} strokeWidth={2} />}
+                    {priority === 'low' && <VolumeX size={16} color={priorityColors[priority].text} strokeWidth={2} />}
                   </TouchableOpacity>
                 ))}
               </View>

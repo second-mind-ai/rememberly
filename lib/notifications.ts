@@ -11,9 +11,11 @@ Notifications.setNotificationHandler({
       shouldShowAlert: true,
       shouldPlaySound: true,
       shouldSetBadge: true,
-      priority: priority === 'high' 
-        ? Notifications.IosNotificationPriority.HIGH 
-        : Notifications.IosNotificationPriority.DEFAULT,
+      ...(Platform.OS === 'ios' && {
+        priority: priority === 'high' 
+          ? Notifications.IosNotificationPriority.HIGH 
+          : Notifications.IosNotificationPriority.DEFAULT,
+      }),
     };
   },
 });
@@ -98,21 +100,29 @@ export async function scheduleLocalNotification(
 
     const channelId = data.priority === 'high' ? 'high-priority' : 'reminders';
     
+    const notificationContent: any = {
+      title,
+      body,
+      data,
+      sound: data.priority === 'high' ? 'default' : true,
+      categoryIdentifier: 'reminder',
+    };
+
+    // Only set iOS-specific priority on iOS
+    if (Platform.OS === 'ios') {
+      notificationContent.priority = data.priority === 'high' 
+        ? Notifications.IosNotificationPriority.HIGH 
+        : Notifications.IosNotificationPriority.DEFAULT;
+    }
+
+    // Only set Android-specific properties on Android
+    if (Platform.OS === 'android') {
+      notificationContent.channelId = channelId;
+      notificationContent.color = data.priority === 'high' ? '#DC2626' : '#2563EB';
+    }
+
     const notificationId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        data,
-        sound: data.priority === 'high' ? 'default' : true,
-        priority: data.priority === 'high' 
-          ? Notifications.IosNotificationPriority.HIGH 
-          : Notifications.IosNotificationPriority.DEFAULT,
-        categoryIdentifier: 'reminder',
-        ...(Platform.OS === 'android' && {
-          channelId,
-          color: data.priority === 'high' ? '#DC2626' : '#2563EB',
-        }),
-      },
+      content: notificationContent,
       trigger: {
         date: triggerDate,
       },
