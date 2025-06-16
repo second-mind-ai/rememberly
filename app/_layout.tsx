@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
-import { initializeNotificationListeners } from '@/lib/reminders';
+import { initializeNotificationListeners } from '@/lib/notifications';
 
 SplashScreen.preventAutoHideAsync();
 

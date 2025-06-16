@@ -8,79 +8,78 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useNotesStore } from '@/lib/store';
-import { parseReminderTime, scheduleNotification } from '@/lib/reminders';
+import { useReminderStore } from '@/lib/reminderStore';
 import { ArrowLeft, Calendar, Bell, Edit3, Trash2, ExternalLink } from 'lucide-react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { Database } from '@/lib/supabase';
 
 type Note = Database['public']['Tables']['notes']['Row'];
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { notes, updateNote, deleteNote, createReminder } = useNotesStore();
+  const { notes, updateNote, deleteNote } = useNotesStore();
+  const { createReminder } = useReminderStore();
   const [note, setNote] = useState<Note | null>(null);
-  const [reminderInput, setReminderInput] = useState('');
+  const [showReminderForm, setShowReminderForm] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [loading, setLoading] = useState(false);
+  
+  const [reminderData, setReminderData] = useState({
+    title: '',
+    description: '',
+    dateTime: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
+    priority: 'medium' as 'low' | 'medium' | 'high',
+  });
 
   useEffect(() => {
     const foundNote = notes.find(n => n.id === id);
     if (foundNote) {
       setNote(foundNote);
+      setReminderData(prev => ({
+        ...prev,
+        title: `Review: ${foundNote.title}`,
+        description: foundNote.summary || 'Review this note',
+      }));
     } else {
-      // Note not found, go back
       router.back();
     }
   }, [id, notes]);
 
   async function handleSetReminder() {
-    if (!reminderInput.trim() || !note) {
-      Alert.alert('Error', 'Please enter a reminder time');
+    if (!reminderData.title.trim() || !note) {
+      Alert.alert('Error', 'Please enter a reminder title');
+      return;
+    }
+
+    if (reminderData.dateTime <= new Date()) {
+      Alert.alert('Error', 'Please select a future date and time');
       return;
     }
 
     setLoading(true);
     try {
-      const parsedDate = parseReminderTime(reminderInput);
-      
-      if (!parsedDate) {
-        Alert.alert('Error', 'Could not understand the reminder time. Try "tomorrow at 9am" or "next week"');
-        setLoading(false);
-        return;
-      }
-
-      // Create reminder in database
-      const reminder = await createReminder({
+      await createReminder({
+        title: reminderData.title.trim(),
+        description: reminderData.description.trim(),
+        remind_at: reminderData.dateTime.toISOString(),
+        priority: reminderData.priority,
         note_id: note.id,
-        remind_at: parsedDate.toISOString(),
-        natural_input: reminderInput,
       });
 
-      if (reminder) {
-        // Schedule local notification
-        await scheduleNotification(
-          `Reminder: ${note.title}`,
-          note.summary || 'Check your note',
-          parsedDate,
-          note.id
-        );
-
-        Alert.alert('Success', `Reminder set for ${parsedDate.toLocaleDateString('en-US', {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-        })}`);
-        setReminderInput('');
-      } else {
-        Alert.alert('Error', 'Failed to create reminder');
-      }
+      Alert.alert(
+        'Reminder Set',
+        `You'll be reminded about this note on ${reminderData.dateTime.toLocaleDateString()} at ${reminderData.dateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      );
+      
+      setShowReminderForm(false);
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
-      console.error('Reminder creation error:', error);
+      Alert.alert('Error', 'Failed to create reminder');
     } finally {
       setLoading(false);
     }
@@ -106,8 +105,28 @@ export default function NoteDetailScreen() {
 
   function handleOpenUrl() {
     if (note?.source_url) {
-      // In a real app, you'd use Linking.openURL
       Alert.alert('Open URL', `Would open: ${note.source_url}`);
+    }
+  }
+
+  function onDateChange(event: any, selectedDate?: Date) {
+    setShowDatePicker(false);
+    if (selectedDate) {
+      const newDateTime = new Date(reminderData.dateTime);
+      newDateTime.setFullYear(selectedDate.getFullYear());
+      newDateTime.setMonth(selectedDate.getMonth());
+      newDateTime.setDate(selectedDate.getDate());
+      setReminderData(prev => ({ ...prev, dateTime: newDateTime }));
+    }
+  }
+
+  function onTimeChange(event: any, selectedTime?: Date) {
+    setShowTimePicker(false);
+    if (selectedTime) {
+      const newDateTime = new Date(reminderData.dateTime);
+      newDateTime.setHours(selectedTime.getHours());
+      newDateTime.setMinutes(selectedTime.getMinutes());
+      setReminderData(prev => ({ ...prev, dateTime: newDateTime }));
     }
   }
 
@@ -124,12 +143,17 @@ export default function NoteDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color="#111827" strokeWidth={2} />
         </TouchableOpacity>
         <View style={styles.headerActions}>
+          <TouchableOpacity 
+            onPress={() => setShowReminderForm(!showReminderForm)} 
+            style={[styles.actionButton, showReminderForm && styles.actionButtonActive]}
+          >
+            <Bell size={20} color={showReminderForm ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+          </TouchableOpacity>
           {note.source_url && (
             <TouchableOpacity onPress={handleOpenUrl} style={styles.actionButton}>
               <ExternalLink size={20} color="#6B7280" strokeWidth={2} />
@@ -142,7 +166,6 @@ export default function NoteDetailScreen() {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* Note Content */}
         <View style={styles.noteSection}>
           <Text style={styles.noteTitle}>{note.title}</Text>
           
@@ -186,38 +209,118 @@ export default function NoteDetailScreen() {
           )}
         </View>
 
-        {/* Set Reminder */}
-        <View style={styles.reminderSection}>
-          <Text style={styles.sectionTitle}>Set Reminder</Text>
-          <Text style={styles.reminderSubtitle}>
-            Use natural language like "tomorrow at 9am" or "next Friday"
-          </Text>
-          
-          <View style={styles.reminderInput}>
-            <View style={styles.reminderInputContainer}>
-              <Calendar size={20} color="#6B7280" strokeWidth={2} />
+        {showReminderForm && (
+          <View style={styles.reminderSection}>
+            <Text style={styles.sectionTitle}>Set Reminder for This Note</Text>
+            
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Reminder Title</Text>
               <TextInput
-                style={styles.reminderTextInput}
-                value={reminderInput}
-                onChangeText={setReminderInput}
-                placeholder="Remind me in 2 hours"
+                style={styles.textInput}
+                value={reminderData.title}
+                onChangeText={(text) => setReminderData(prev => ({ ...prev, title: text }))}
+                placeholder="What should we remind you about?"
                 placeholderTextColor="#9CA3AF"
               />
             </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Description (Optional)</Text>
+              <TextInput
+                style={[styles.textInput, styles.textArea]}
+                value={reminderData.description}
+                onChangeText={(text) => setReminderData(prev => ({ ...prev, description: text }))}
+                placeholder="Additional details..."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                numberOfLines={2}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Date & Time</Text>
+              <View style={styles.dateTimeContainer}>
+                <TouchableOpacity
+                  style={styles.dateTimeButton}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Calendar size={20} color="#6B7280" strokeWidth={2} />
+                  <Text style={styles.dateTimeText}>
+                    {reminderData.dateTime.toLocaleDateString()}
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.dateTimeButton}
+                  onPress={() => setShowTimePicker(true)}
+                >
+                  <Bell size={20} color="#6B7280" strokeWidth={2} />
+                  <Text style={styles.dateTimeText}>
+                    {reminderData.dateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Priority</Text>
+              <View style={styles.priorityContainer}>
+                {(['low', 'medium', 'high'] as const).map((priority) => (
+                  <TouchableOpacity
+                    key={priority}
+                    style={[
+                      styles.priorityButton,
+                      reminderData.priority === priority && styles.priorityButtonActive
+                    ]}
+                    onPress={() => setReminderData(prev => ({ ...prev, priority }))}
+                  >
+                    <Text style={[
+                      styles.priorityText,
+                      reminderData.priority === priority && styles.priorityTextActive
+                    ]}>
+                      {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             <TouchableOpacity
-              style={[styles.setReminderButton, (!reminderInput.trim() || loading) && styles.buttonDisabled]}
+              style={[styles.setReminderButton, loading && styles.buttonDisabled]}
               onPress={handleSetReminder}
-              disabled={!reminderInput.trim() || loading}
+              disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator size="small" color="#ffffff" />
               ) : (
-                <Bell size={16} color="#ffffff" strokeWidth={2} />
+                <>
+                  <Bell size={16} color="#ffffff" strokeWidth={2} />
+                  <Text style={styles.setReminderButtonText}>Set Reminder</Text>
+                </>
               )}
             </TouchableOpacity>
           </View>
-        </View>
+        )}
       </ScrollView>
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={reminderData.dateTime}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onDateChange}
+          minimumDate={new Date()}
+        />
+      )}
+
+      {showTimePicker && (
+        <DateTimePicker
+          value={reminderData.dateTime}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onTimeChange}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -257,6 +360,11 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  actionButtonActive: {
+    backgroundColor: '#2563EB',
   },
   content: {
     flex: 1,
@@ -352,42 +460,86 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
   },
-  reminderSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+  inputGroup: {
     marginBottom: 16,
   },
-  reminderInput: {
-    flexDirection: 'row',
-    gap: 8,
+  inputLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 8,
   },
-  reminderInputContainer: {
+  textInput: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  textArea: {
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  dateTimeContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateTimeButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F9FAFB',
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
+    padding: 12,
+    gap: 8,
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  reminderTextInput: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
+  dateTimeText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
     color: '#111827',
   },
-  setReminderButton: {
+  priorityContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  priorityButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+  },
+  priorityButtonActive: {
     backgroundColor: '#2563EB',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+  },
+  priorityText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  priorityTextActive: {
+    color: '#ffffff',
+  },
+  setReminderButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 48,
+    backgroundColor: '#2563EB',
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+    marginTop: 8,
+  },
+  setReminderButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#ffffff',
   },
   buttonDisabled: {
     opacity: 0.6,

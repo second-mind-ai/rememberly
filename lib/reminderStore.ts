@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
+import { scheduleLocalNotification, cancelNotification, NotificationData } from './notifications';
 
 export interface Reminder {
   id: string;
@@ -95,6 +96,30 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       if (error) throw error;
 
+      // Schedule local notification
+      const notificationData: NotificationData = {
+        reminderId: newReminder.id,
+        noteId: newReminder.note_id || undefined,
+        priority: newReminder.priority,
+      };
+
+      const notificationId = await scheduleLocalNotification(
+        newReminder.title,
+        newReminder.description || 'Reminder notification',
+        new Date(newReminder.remind_at),
+        notificationData
+      );
+
+      // Update reminder with notification ID
+      if (notificationId) {
+        await supabase
+          .from('reminders')
+          .update({ notification_id: notificationId })
+          .eq('id', newReminder.id);
+        
+        newReminder.notification_id = notificationId;
+      }
+
       set(state => ({
         reminders: [...state.reminders, newReminder].sort(
           (a, b) => new Date(a.remind_at).getTime() - new Date(b.remind_at).getTime()
@@ -113,6 +138,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     set({ error: null });
     
     try {
+      const reminder = get().reminders.find(r => r.id === id);
+      
+      // Cancel notification if exists
+      if (reminder?.notification_id) {
+        await cancelNotification(reminder.notification_id);
+      }
+
       const { error } = await supabase
         .from('reminders')
         .update({ is_completed: true })
@@ -135,6 +167,13 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
     set({ error: null });
     
     try {
+      const reminder = get().reminders.find(r => r.id === id);
+      
+      // Cancel notification if exists
+      if (reminder?.notification_id) {
+        await cancelNotification(reminder.notification_id);
+      }
+
       const { error } = await supabase
         .from('reminders')
         .delete()
@@ -162,11 +201,34 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
         throw new Error('Reminder not found');
       }
 
+      // Cancel existing notification
+      if (reminder.notification_id) {
+        await cancelNotification(reminder.notification_id);
+      }
+
       const newRemindAt = new Date(Date.now() + minutes * 60 * 1000).toISOString();
 
+      // Schedule new notification
+      const notificationData: NotificationData = {
+        reminderId: reminder.id,
+        noteId: reminder.note_id || undefined,
+        priority: reminder.priority,
+      };
+
+      const notificationId = await scheduleLocalNotification(
+        reminder.title,
+        reminder.description || 'Reminder notification',
+        new Date(newRemindAt),
+        notificationData
+      );
+
+      // Update reminder in database
       const { error } = await supabase
         .from('reminders')
-        .update({ remind_at: newRemindAt })
+        .update({ 
+          remind_at: newRemindAt,
+          notification_id: notificationId,
+        })
         .eq('id', id);
 
       if (error) throw error;
@@ -174,7 +236,7 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
       set(state => ({
         reminders: state.reminders.map(reminder =>
           reminder.id === id
-            ? { ...reminder, remind_at: newRemindAt }
+            ? { ...reminder, remind_at: newRemindAt, notification_id: notificationId }
             : reminder
         ).sort((a, b) => new Date(a.remind_at).getTime() - new Date(b.remind_at).getTime())
       }));

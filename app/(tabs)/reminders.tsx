@@ -12,10 +12,9 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNotesStore } from '@/lib/store';
 import { useReminderStore } from '@/lib/reminderStore';
-import { formatReminderTime, requestNotificationPermissions } from '@/lib/reminders';
-import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2 } from 'lucide-react-native';
+import { registerForPushNotificationsAsync, formatReminderTime } from '@/lib/notifications';
+import { Bell, Calendar, Check, Clock, Plus, X, AlertCircle, Volume2, VolumeX, Trash2 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 type Priority = 'low' | 'medium' | 'high';
@@ -28,7 +27,6 @@ interface ReminderFormData {
 }
 
 export default function RemindersScreen() {
-  const { notes } = useNotesStore();
   const { 
     reminders, 
     loading, 
@@ -58,8 +56,13 @@ export default function RemindersScreen() {
   }, []);
 
   async function initializeReminders() {
-    const permission = await requestNotificationPermissions();
-    setHasPermission(permission);
+    try {
+      const token = await registerForPushNotificationsAsync();
+      setHasPermission(!!token);
+    } catch (error) {
+      console.error('Failed to register for notifications:', error);
+      setHasPermission(false);
+    }
     await fetchReminders();
   }
 
@@ -98,10 +101,15 @@ export default function RemindersScreen() {
           { 
             text: 'Enable', 
             onPress: async () => {
-              const permission = await requestNotificationPermissions();
-              setHasPermission(permission);
-              if (!permission) {
-                Alert.alert('Error', 'Notifications are required for reminders to work');
+              try {
+                const token = await registerForPushNotificationsAsync();
+                setHasPermission(!!token);
+                if (!token) {
+                  Alert.alert('Error', 'Notifications are required for reminders to work');
+                  return;
+                }
+              } catch (error) {
+                Alert.alert('Error', 'Failed to enable notifications');
                 return;
               }
             }
@@ -234,8 +242,12 @@ export default function RemindersScreen() {
           <TouchableOpacity 
             style={styles.permissionBanner}
             onPress={async () => {
-              const permission = await requestNotificationPermissions();
-              setHasPermission(permission);
+              try {
+                const token = await registerForPushNotificationsAsync();
+                setHasPermission(!!token);
+              } catch (error) {
+                Alert.alert('Error', 'Failed to enable notifications');
+              }
             }}
           >
             <AlertCircle size={16} color="#DC2626" strokeWidth={2} />
@@ -258,7 +270,6 @@ export default function RemindersScreen() {
           </View>
         )}
 
-        {/* Overdue Reminders */}
         {overdueReminders.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -283,7 +294,6 @@ export default function RemindersScreen() {
           </View>
         )}
 
-        {/* Upcoming Reminders */}
         {upcomingReminders.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
@@ -308,7 +318,6 @@ export default function RemindersScreen() {
           </View>
         )}
 
-        {/* Empty State */}
         {reminders.length === 0 && !loading && (
           <View style={styles.emptyState}>
             <Bell size={48} color="#9CA3AF" strokeWidth={2} />
@@ -327,7 +336,6 @@ export default function RemindersScreen() {
         )}
       </ScrollView>
 
-      {/* Add Reminder Modal */}
       <Modal
         visible={showAddModal}
         animationType="slide"
@@ -352,7 +360,6 @@ export default function RemindersScreen() {
           </View>
 
           <ScrollView style={styles.modalContent}>
-            {/* Title Input */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Title *</Text>
               <TextInput
@@ -366,7 +373,6 @@ export default function RemindersScreen() {
               />
             </View>
 
-            {/* Description Input */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Description (Optional)</Text>
               <TextInput
@@ -381,7 +387,6 @@ export default function RemindersScreen() {
               />
             </View>
 
-            {/* Date & Time Selection */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Date & Time</Text>
               <View style={styles.dateTimeContainer}>
@@ -407,7 +412,6 @@ export default function RemindersScreen() {
               </View>
             </View>
 
-            {/* Priority Selection */}
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Priority</Text>
               <View style={styles.priorityContainer}>
@@ -439,7 +443,6 @@ export default function RemindersScreen() {
               </View>
             </View>
 
-            {/* Preview */}
             <View style={styles.previewSection}>
               <Text style={styles.inputLabel}>Preview</Text>
               <View style={styles.previewCard}>
@@ -467,7 +470,6 @@ export default function RemindersScreen() {
           </ScrollView>
         </SafeAreaView>
 
-        {/* Date Picker */}
         {showDatePicker && (
           <DateTimePicker
             value={formData.dateTime}
@@ -478,7 +480,6 @@ export default function RemindersScreen() {
           />
         )}
 
-        {/* Time Picker */}
         {showTimePicker && (
           <DateTimePicker
             value={formData.dateTime}
