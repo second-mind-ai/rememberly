@@ -7,13 +7,18 @@ Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
-    shouldSetBadge: false,
+    shouldSetBadge: true,
   }),
 });
 
 export async function requestNotificationPermissions(): Promise<boolean> {
   if (Platform.OS === 'web') {
-    return true; // Web doesn't need explicit permission request
+    // For web, check if browser supports notifications
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+    }
+    return false;
   }
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -44,13 +49,27 @@ export async function scheduleNotification(
   title: string,
   body: string,
   triggerDate: Date,
-  noteId: string
+  priority: 'low' | 'medium' | 'high' = 'medium'
 ): Promise<string | null> {
   try {
     if (Platform.OS === 'web') {
-      // Web notifications would be handled differently
-      console.log('Would schedule web notification:', { title, body, triggerDate });
-      return 'web-notification-id';
+      // Web notifications
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const timeUntilTrigger = triggerDate.getTime() - Date.now();
+        if (timeUntilTrigger > 0) {
+          const timeoutId = setTimeout(() => {
+            new Notification(title, {
+              body,
+              icon: '/favicon.png',
+              badge: '/favicon.png',
+              tag: `reminder-${Date.now()}`,
+              requireInteraction: priority === 'high',
+            });
+          }, timeUntilTrigger);
+          return `web-${timeoutId}`;
+        }
+      }
+      return null;
     }
 
     const hasPermission = await requestNotificationPermissions();
@@ -58,11 +77,35 @@ export async function scheduleNotification(
       throw new Error('Notification permission denied');
     }
 
+    // Configure notification sound based on priority
+    let sound: string | undefined;
+    let priority_android: Notifications.AndroidNotificationPriority;
+    
+    switch (priority) {
+      case 'high':
+        sound = 'default';
+        priority_android = Notifications.AndroidNotificationPriority.HIGH;
+        break;
+      case 'medium':
+        sound = 'default';
+        priority_android = Notifications.AndroidNotificationPriority.DEFAULT;
+        break;
+      case 'low':
+        sound = undefined;
+        priority_android = Notifications.AndroidNotificationPriority.LOW;
+        break;
+    }
+
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
         title,
         body,
-        data: { noteId },
+        sound,
+        priority: priority === 'high' ? Notifications.IosNotificationPriority.HIGH : Notifications.IosNotificationPriority.DEFAULT,
+        data: { 
+          priority,
+          timestamp: triggerDate.toISOString(),
+        },
       },
       trigger: {
         date: triggerDate,
@@ -76,6 +119,22 @@ export async function scheduleNotification(
   }
 }
 
+export async function cancelNotification(notificationId: string): Promise<void> {
+  try {
+    if (Platform.OS === 'web') {
+      if (notificationId.startsWith('web-')) {
+        const timeoutId = parseInt(notificationId.replace('web-', ''));
+        clearTimeout(timeoutId);
+      }
+      return;
+    }
+
+    await Notifications.cancelScheduledNotificationAsync(notificationId);
+  } catch (error) {
+    console.error('Error canceling notification:', error);
+  }
+}
+
 export function formatReminderTime(date: Date): string {
   const now = new Date();
   const diffMs = date.getTime() - now.getTime();
@@ -84,6 +143,7 @@ export function formatReminderTime(date: Date): string {
 
   if (diffHours < 1) {
     const diffMinutes = Math.round(diffMs / (1000 * 60));
+    if (diffMinutes <= 0) return 'Now';
     return `in ${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''}`;
   } else if (diffHours < 24) {
     const hours = Math.round(diffHours);
@@ -100,4 +160,23 @@ export function formatReminderTime(date: Date): string {
       minute: '2-digit',
     });
   }
+}
+
+// Initialize notification listeners
+export function initializeNotificationListeners() {
+  // Handle notification received while app is in foreground
+  const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
+    console.log('Notification received in foreground:', notification);
+  });
+
+  // Handle notification response (user tapped notification)
+  const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
+    console.log('Notification response:', response);
+    // You can navigate to specific screens based on notification data
+  });
+
+  return () => {
+    foregroundSubscription.remove();
+    responseSubscription.remove();
+  };
 }

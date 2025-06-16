@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
+import { initializeNotificationListeners } from '@/lib/reminders';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -24,6 +25,12 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
+
+  useEffect(() => {
+    // Initialize notification listeners
+    const cleanup = initializeNotificationListeners();
+    return cleanup;
+  }, []);
 
   if (!fontsLoaded && !fontError) {
     return null;
