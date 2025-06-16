@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Home, Search, Bell, Plus } from 'lucide-react-native';
+import { Home, Search, Bell, Plus, FolderOpen } from 'lucide-react-native';
 
 export default function TabLayout() {
   return (
@@ -31,9 +31,18 @@ export default function TabLayout() {
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Explore',
+          title: 'Notes',
           tabBarIcon: ({ size, color }) => (
             <Search size={size} color={color} strokeWidth={2} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="categories"
+        options={{
+          title: 'Categories',
+          tabBarIcon: ({ size, color }) => (
+            <FolderOpen size={size} color={color} strokeWidth={2} />
           ),
         }}
       />
