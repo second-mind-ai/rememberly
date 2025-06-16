@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotesStore } from '@/lib/store';
-import { Search, Filter, ArrowUpDown, Grid2x2 as Grid, List, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Search, ListFilter as Filter, ArrowUpDown, Grid2x2 as Grid, List, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
 
 type SortOption = 'newest' | 'oldest' | 'title' | 'type';
