@@ -1,200 +1,188 @@
 import { create } from 'zustand';
-import { supabase, Database } from './supabase';
-import { scheduleNotification, cancelNotification } from './reminders';
+import { supabase } from './supabase';
 
-type Reminder = Database['public']['Tables']['reminders']['Row'] & {
-  priority?: 'low' | 'medium' | 'high';
+export interface Reminder {
+  id: string;
+  note_id?: string;
+  user_id: string;
+  remind_at: string;
+  natural_input: string;
+  is_completed: boolean;
+  created_at: string;
+  title: string;
+  description?: string;
+  priority: 'low' | 'medium' | 'high';
   notification_id?: string;
-};
+}
 
-interface ReminderState {
+interface CreateReminderData {
+  title: string;
+  description?: string;
+  remind_at: string;
+  priority: 'low' | 'medium' | 'high';
+  note_id?: string;
+}
+
+interface ReminderStore {
   reminders: Reminder[];
   loading: boolean;
   error: string | null;
-  
-  // Actions
   fetchReminders: () => Promise<void>;
-  createReminder: (reminder: {
-    title: string;
-    description: string;
-    remind_at: string;
-    priority: 'low' | 'medium' | 'high';
-  }) => Promise<Reminder | null>;
+  createReminder: (data: CreateReminderData) => Promise<void>;
   completeReminder: (id: string) => Promise<void>;
   deleteReminder: (id: string) => Promise<void>;
   snoozeReminder: (id: string, minutes: number) => Promise<void>;
-  clearError: () => void;
 }
 
-export const useReminderStore = create<ReminderState>((set, get) => ({
+export const useReminderStore = create<ReminderStore>((set, get) => ({
   reminders: [],
   loading: false,
   error: null,
 
   fetchReminders: async () => {
+    set({ loading: true, error: null });
+    
     try {
-      set({ loading: true, error: null });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
       const { data, error } = await supabase
         .from('reminders')
         .select('*')
+        .eq('user_id', user.id)
         .eq('is_completed', false)
         .order('remind_at', { ascending: true });
-      
+
       if (error) throw error;
+
       set({ reminders: data || [], loading: false });
     } catch (error) {
-      set({ error: (error as Error).message, loading: false });
+      console.error('Error fetching reminders:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to fetch reminders',
+        loading: false 
+      });
     }
   },
 
-  createReminder: async (reminderData) => {
+  createReminder: async (data: CreateReminderData) => {
+    set({ error: null });
+    
     try {
-      set({ loading: true, error: null });
       const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) throw new Error('User not authenticated');
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
 
-      // Schedule notification first
-      const notificationId = await scheduleNotification(
-        reminderData.title,
-        reminderData.description || 'Reminder notification',
-        new Date(reminderData.remind_at),
-        reminderData.priority
-      );
+      const reminderData = {
+        user_id: user.id,
+        title: data.title,
+        description: data.description || '',
+        remind_at: data.remind_at,
+        priority: data.priority,
+        natural_input: `Remind me about "${data.title}" on ${new Date(data.remind_at).toLocaleString()}`,
+        note_id: data.note_id || null,
+        is_completed: false,
+      };
 
-      // Create reminder in database
-      const { data, error } = await supabase
+      const { data: newReminder, error } = await supabase
         .from('reminders')
-        .insert({
-          user_id: user.id,
-          title: reminderData.title,
-          description: reminderData.description,
-          remind_at: reminderData.remind_at,
-          priority: reminderData.priority,
-          notification_id: notificationId,
-        })
+        .insert([reminderData])
         .select()
         .single();
-      
-      if (error) {
-        // Cancel notification if database insert fails
-        if (notificationId) {
-          await cancelNotification(notificationId);
-        }
-        throw error;
-      }
-      
-      const currentReminders = get().reminders;
-      set({ reminders: [...currentReminders, data], loading: false });
-      return data;
+
+      if (error) throw error;
+
+      set(state => ({
+        reminders: [...state.reminders, newReminder].sort(
+          (a, b) => new Date(a.remind_at).getTime() - new Date(b.remind_at).getTime()
+        )
+      }));
     } catch (error) {
-      set({ error: (error as Error).message, loading: false });
-      return null;
+      console.error('Error creating reminder:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to create reminder'
+      });
+      throw error;
     }
   },
 
-  completeReminder: async (id) => {
+  completeReminder: async (id: string) => {
+    set({ error: null });
+    
     try {
-      set({ loading: true, error: null });
-      
-      // Find reminder to get notification ID
-      const reminder = get().reminders.find(r => r.id === id);
-      if (reminder?.notification_id) {
-        await cancelNotification(reminder.notification_id);
-      }
-
       const { error } = await supabase
         .from('reminders')
         .update({ is_completed: true })
         .eq('id', id);
-      
+
       if (error) throw error;
-      
-      const currentReminders = get().reminders;
-      const filteredReminders = currentReminders.filter(reminder => reminder.id !== id);
-      set({ reminders: filteredReminders, loading: false });
+
+      set(state => ({
+        reminders: state.reminders.filter(reminder => reminder.id !== id)
+      }));
     } catch (error) {
-      set({ error: (error as Error).message, loading: false });
+      console.error('Error completing reminder:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to complete reminder'
+      });
     }
   },
 
-  deleteReminder: async (id) => {
+  deleteReminder: async (id: string) => {
+    set({ error: null });
+    
     try {
-      set({ loading: true, error: null });
-      
-      // Find reminder to get notification ID
-      const reminder = get().reminders.find(r => r.id === id);
-      if (reminder?.notification_id) {
-        await cancelNotification(reminder.notification_id);
-      }
-
       const { error } = await supabase
         .from('reminders')
         .delete()
         .eq('id', id);
-      
+
       if (error) throw error;
-      
-      const currentReminders = get().reminders;
-      const filteredReminders = currentReminders.filter(reminder => reminder.id !== id);
-      set({ reminders: filteredReminders, loading: false });
+
+      set(state => ({
+        reminders: state.reminders.filter(reminder => reminder.id !== id)
+      }));
     } catch (error) {
-      set({ error: (error as Error).message, loading: false });
+      console.error('Error deleting reminder:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to delete reminder'
+      });
     }
   },
 
-  snoozeReminder: async (id, minutes) => {
+  snoozeReminder: async (id: string, minutes: number) => {
+    set({ error: null });
+    
     try {
-      set({ loading: true, error: null });
-      
       const reminder = get().reminders.find(r => r.id === id);
-      if (!reminder) throw new Error('Reminder not found');
-
-      // Cancel existing notification
-      if (reminder.notification_id) {
-        await cancelNotification(reminder.notification_id);
+      if (!reminder) {
+        throw new Error('Reminder not found');
       }
 
-      // Calculate new reminder time
-      const newRemindAt = new Date(Date.now() + minutes * 60 * 1000);
+      const newRemindAt = new Date(Date.now() + minutes * 60 * 1000).toISOString();
 
-      // Schedule new notification
-      const notificationId = await scheduleNotification(
-        reminder.title,
-        reminder.description || 'Reminder notification',
-        newRemindAt,
-        reminder.priority || 'medium'
-      );
-
-      // Update reminder in database
       const { error } = await supabase
         .from('reminders')
-        .update({ 
-          remind_at: newRemindAt.toISOString(),
-          notification_id: notificationId,
-        })
+        .update({ remind_at: newRemindAt })
         .eq('id', id);
-      
-      if (error) {
-        // Cancel new notification if database update fails
-        if (notificationId) {
-          await cancelNotification(notificationId);
-        }
-        throw error;
-      }
-      
-      // Update local state
-      const currentReminders = get().reminders;
-      const updatedReminders = currentReminders.map(r => 
-        r.id === id 
-          ? { ...r, remind_at: newRemindAt.toISOString(), notification_id: notificationId }
-          : r
-      );
-      set({ reminders: updatedReminders, loading: false });
+
+      if (error) throw error;
+
+      set(state => ({
+        reminders: state.reminders.map(reminder =>
+          reminder.id === id
+            ? { ...reminder, remind_at: newRemindAt }
+            : reminder
+        ).sort((a, b) => new Date(a.remind_at).getTime() - new Date(b.remind_at).getTime())
+      }));
     } catch (error) {
-      set({ error: (error as Error).message, loading: false });
+      console.error('Error snoozing reminder:', error);
+      set({ 
+        error: error instanceof Error ? error.message : 'Failed to snooze reminder'
+      });
     }
   },
-
-  clearError: () => set({ error: null }),
 }));
