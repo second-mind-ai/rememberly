@@ -3,20 +3,48 @@ import {
   View,
   Text,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotesStore } from '@/lib/store';
-import { Search, Filter, Tag } from 'lucide-react-native';
+import { 
+  Search, 
+  Plus, 
+  Heart, 
+  DollarSign, 
+  Newspaper, 
+  Settings, 
+  Briefcase, 
+  Home,
+  Edit3,
+  Trash2,
+  Sparkles
+} from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
 
-export default function ExploreScreen() {
+interface Category {
+  id: string;
+  name: string;
+  description: string;
+  icon: any;
+  color: string;
+  backgroundColor: string;
+  count: number;
+  isAI?: boolean;
+}
+
+interface UserCategory {
+  id: string;
+  name: string;
+  count: number;
+  color: string;
+}
+
+export default function CategoriesScreen() {
   const { notes, loading, fetchNotes, error } = useNotesStore();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -29,95 +57,138 @@ export default function ExploreScreen() {
     setRefreshing(false);
   }
 
-  // Get all unique tags from notes
-  const allTags = Array.from(new Set(notes.flatMap(note => note.tags || [])));
+  // AI-generated categories based on common tags
+  const aiCategories: Category[] = [
+    {
+      id: 'health',
+      name: 'Health',
+      description: 'Medical, fitness, wellness',
+      icon: Heart,
+      color: '#059669',
+      backgroundColor: '#ECFDF5',
+      count: notes.filter(note => 
+        note.tags?.some(tag => 
+          ['health', 'fitness', 'medical', 'wellness', 'exercise', 'diet'].includes(tag.toLowerCase())
+        )
+      ).length,
+      isAI: true
+    },
+    {
+      id: 'technology',
+      name: 'Technology',
+      description: 'AI, software, gadgets',
+      icon: Settings,
+      color: '#2563EB',
+      backgroundColor: '#EFF6FF',
+      count: notes.filter(note => 
+        note.tags?.some(tag => 
+          ['technology', 'ai', 'software', 'programming', 'tech', 'code'].includes(tag.toLowerCase())
+        )
+      ).length,
+      isAI: true
+    },
+    {
+      id: 'finance',
+      name: 'Finance',
+      description: 'Investment, banking, crypto',
+      icon: DollarSign,
+      color: '#D97706',
+      backgroundColor: '#FEF3C7',
+      count: notes.filter(note => 
+        note.tags?.some(tag => 
+          ['finance', 'money', 'investment', 'banking', 'crypto', 'stocks'].includes(tag.toLowerCase())
+        )
+      ).length,
+      isAI: true
+    },
+    {
+      id: 'news',
+      name: 'News',
+      description: 'Current events, politics',
+      icon: Newspaper,
+      color: '#DC2626',
+      backgroundColor: '#FEF2F2',
+      count: notes.filter(note => 
+        note.tags?.some(tag => 
+          ['news', 'politics', 'current', 'events', 'world', 'breaking'].includes(tag.toLowerCase())
+        )
+      ).length,
+      isAI: true
+    }
+  ];
 
-  // Filter notes based on search and selected tag
-  const filteredNotes = notes.filter(note => {
-    const matchesSearch = !searchQuery || 
-      note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      note.original_content.toLowerCase().includes(searchQuery.toLowerCase());
+  // User-created categories (mock data for now)
+  const userCategories: UserCategory[] = [
+    {
+      id: 'work-projects',
+      name: 'Work Projects',
+      count: 4,
+      color: '#F97316'
+    },
+    {
+      id: 'personal',
+      name: 'Personal',
+      count: 6,
+      color: '#059669'
+    }
+  ];
+
+  // Get filtered notes based on selected category
+  const getFilteredNotes = () => {
+    if (!selectedCategory) return notes;
     
-    const matchesTag = !selectedTag || (note.tags && note.tags.includes(selectedTag));
-    
-    return matchesSearch && matchesTag;
-  });
+    const category = aiCategories.find(cat => cat.id === selectedCategory);
+    if (!category) return notes;
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Explore Notes</Text>
-        <Text style={styles.subtitle}>Search and discover your saved content</Text>
-      </View>
+    return notes.filter(note => {
+      switch (selectedCategory) {
+        case 'health':
+          return note.tags?.some(tag => 
+            ['health', 'fitness', 'medical', 'wellness', 'exercise', 'diet'].includes(tag.toLowerCase())
+          );
+        case 'technology':
+          return note.tags?.some(tag => 
+            ['technology', 'ai', 'software', 'programming', 'tech', 'code'].includes(tag.toLowerCase())
+          );
+        case 'finance':
+          return note.tags?.some(tag => 
+            ['finance', 'money', 'investment', 'banking', 'crypto', 'stocks'].includes(tag.toLowerCase())
+          );
+        case 'news':
+          return note.tags?.some(tag => 
+            ['news', 'politics', 'current', 'events', 'world', 'breaking'].includes(tag.toLowerCase())
+          );
+        default:
+          return true;
+      }
+    });
+  };
 
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      >
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <View style={styles.searchInputContainer}>
-            <Search size={20} color="#6B7280" strokeWidth={2} />
-            <TextInput
-              style={styles.searchInput}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search notes..."
-              placeholderTextColor="#9CA3AF"
-            />
-          </View>
+  const filteredNotes = getFilteredNotes();
+  const totalCategories = aiCategories.length + userCategories.length;
+  const totalItems = notes.length;
+
+  if (selectedCategory) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity 
+            onPress={() => setSelectedCategory(null)}
+            style={styles.backButton}
+          >
+            <Text style={styles.backText}>← Categories</Text>
+          </TouchableOpacity>
+          <Text style={styles.categoryTitle}>
+            {aiCategories.find(cat => cat.id === selectedCategory)?.name}
+          </Text>
         </View>
 
-        {/* Tags Filter */}
-        {allTags.length > 0 && (
-          <View style={styles.tagsSection}>
-            <View style={styles.tagsSectionHeader}>
-              <Tag size={16} color="#6B7280" strokeWidth={2} />
-              <Text style={styles.tagsTitle}>Filter by Tag</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tagsContainer}>
-              <TouchableOpacity
-                style={[styles.tagFilter, !selectedTag && styles.activeTagFilter]}
-                onPress={() => setSelectedTag(null)}
-              >
-                <Text style={[styles.tagFilterText, !selectedTag && styles.activeTagFilterText]}>
-                  All
-                </Text>
-              </TouchableOpacity>
-              {allTags.map((tag, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[styles.tagFilter, selectedTag === tag && styles.activeTagFilter]}
-                  onPress={() => setSelectedTag(selectedTag === tag ? null : tag)}
-                >
-                  <Text style={[styles.tagFilterText, selectedTag === tag && styles.activeTagFilterText]}>
-                    {tag}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {/* Results */}
-        <View style={styles.resultsSection}>
-          <View style={styles.resultsHeader}>
-            <Text style={styles.resultsTitle}>
-              {filteredNotes.length} note{filteredNotes.length !== 1 ? 's' : ''}
-              {searchQuery && ` for "${searchQuery}"`}
-              {selectedTag && ` tagged "${selectedTag}"`}
-            </Text>
-          </View>
-
-          {error && (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
-
+        <ScrollView
+          style={styles.content}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+        >
           {filteredNotes.length > 0 ? (
             <View style={styles.notesContainer}>
               {filteredNotes.map((note) => (
@@ -126,17 +197,122 @@ export default function ExploreScreen() {
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Search size={48} color="#9CA3AF" strokeWidth={2} />
-              <Text style={styles.emptyTitle}>No notes found</Text>
+              <Text style={styles.emptyTitle}>No notes in this category</Text>
               <Text style={styles.emptySubtitle}>
-                {searchQuery || selectedTag
-                  ? 'Try adjusting your search or filter criteria'
-                  : 'Create your first note to see it here'
-                }
+                Create notes with relevant tags to see them here
               </Text>
             </View>
           )}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <Text style={styles.title}>Categories</Text>
+          <TouchableOpacity style={styles.addButton}>
+            <Plus size={20} color="#6B7280" strokeWidth={2} />
+          </TouchableOpacity>
         </View>
+      </View>
+
+      <ScrollView
+        style={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
+        {/* AI-Tagged Categories */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Sparkles size={16} color="#7C3AED" strokeWidth={2} />
+            <Text style={styles.sectionTitle}>AI-Tagged Categories</Text>
+          </View>
+
+          <View style={styles.categoriesGrid}>
+            {aiCategories.map((category) => {
+              const Icon = category.icon;
+              return (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[styles.categoryCard, { backgroundColor: category.backgroundColor }]}
+                  onPress={() => setSelectedCategory(category.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.categoryHeader}>
+                    <View style={[styles.categoryIcon, { backgroundColor: category.color + '20' }]}>
+                      <Icon size={20} color={category.color} strokeWidth={2} />
+                    </View>
+                    <Text style={styles.categoryCount}>{category.count}</Text>
+                  </View>
+                  <Text style={styles.categoryName}>{category.name}</Text>
+                  <Text style={styles.categoryDescription}>{category.description}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* My Categories */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.folderIcon}>
+              <View style={styles.folderIconInner} />
+            </View>
+            <Text style={styles.sectionTitle}>My Categories</Text>
+            <TouchableOpacity style={styles.addNewButton}>
+              <Text style={styles.addNewText}>Add New</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.userCategoriesList}>
+            {userCategories.map((category) => (
+              <View key={category.id} style={styles.userCategoryCard}>
+                <View style={styles.userCategoryLeft}>
+                  <View style={[styles.userCategoryIcon, { backgroundColor: category.color }]}>
+                    <Briefcase size={16} color="#ffffff" strokeWidth={2} />
+                  </View>
+                  <View style={styles.userCategoryInfo}>
+                    <Text style={styles.userCategoryName}>{category.name}</Text>
+                    <Text style={styles.userCategoryCount}>{category.count} items</Text>
+                  </View>
+                </View>
+                <View style={styles.userCategoryActions}>
+                  <TouchableOpacity style={styles.actionButton}>
+                    <Edit3 size={16} color="#6B7280" strokeWidth={2} />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButton}>
+                    <Trash2 size={16} color="#6B7280" strokeWidth={2} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Category Overview */}
+        <View style={styles.overviewSection}>
+          <Text style={styles.overviewTitle}>Category Overview</Text>
+          <View style={styles.overviewStats}>
+            <View style={styles.overviewStat}>
+              <Text style={styles.overviewNumber}>{totalCategories}</Text>
+              <Text style={styles.overviewLabel}>Total Categories</Text>
+            </View>
+            <View style={styles.overviewStat}>
+              <Text style={styles.overviewNumber}>{totalItems}</Text>
+              <Text style={styles.overviewLabel}>Total Items</Text>
+            </View>
+          </View>
+        </View>
+
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -145,113 +321,232 @@ export default function ExploreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F8FAFC',
   },
   header: {
     backgroundColor: '#ffffff',
     paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#E2E8F0',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     fontSize: 28,
     fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
+    color: '#0F172A',
   },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+  addButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+  },
+  backText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#475569',
+  },
+  categoryTitle: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#0F172A',
   },
   content: {
     flex: 1,
   },
-  searchContainer: {
-    padding: 20,
-  },
-  searchInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-  },
-  tagsSection: {
+  section: {
     paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingVertical: 24,
   },
-  tagsSectionHeader: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 16,
     gap: 8,
-    marginBottom: 12,
   },
-  tagsTitle: {
-    fontSize: 16,
+  sectionTitle: {
+    fontSize: 18,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: '#1E293B',
+    flex: 1,
   },
-  tagsContainer: {
-    flexDirection: 'row',
+  addNewButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 6,
   },
-  tagFilter: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  activeTagFilter: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
-  },
-  tagFilterText: {
+  addNewText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    color: '#2563EB',
   },
-  activeTagFilterText: {
-    color: '#ffffff',
+  categoriesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
   },
-  resultsSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+  categoryCard: {
+    width: '48%',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
-  resultsHeader: {
-    marginBottom: 16,
+  categoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
-  resultsTitle: {
+  categoryIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryCount: {
+    fontSize: 20,
+    fontFamily: 'Inter-Bold',
+    color: '#1E293B',
+  },
+  categoryName: {
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  categoryDescription: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  userCategoriesList: {
+    gap: 12,
+  },
+  userCategoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  userCategoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  userCategoryIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userCategoryInfo: {
+    flex: 1,
+  },
+  userCategoryName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  userCategoryCount: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
+  },
+  userCategoryActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButton: {
+    padding: 8,
+    borderRadius: 6,
+    backgroundColor: '#F8FAFC',
+  },
+  folderIcon: {
+    width: 16,
+    height: 16,
+    backgroundColor: '#64748B',
+    borderRadius: 2,
+    position: 'relative',
+  },
+  folderIconInner: {
+    position: 'absolute',
+    top: -2,
+    left: 2,
+    right: 2,
+    height: 4,
+    backgroundColor: '#64748B',
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+  },
+  overviewSection: {
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+  },
+  overviewTitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
+    marginBottom: 16,
+  },
+  overviewStats: {
+    flexDirection: 'row',
+    gap: 24,
+  },
+  overviewStat: {
+    alignItems: 'center',
+  },
+  overviewNumber: {
+    fontSize: 32,
+    fontFamily: 'Inter-Bold',
+    color: '#2563EB',
+    marginBottom: 4,
+  },
+  overviewLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
   },
   notesContainer: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
     gap: 12,
   },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
-    gap: 12,
+    paddingHorizontal: 20,
+    gap: 8,
   },
   emptyTitle: {
     fontSize: 18,
     fontFamily: 'Inter-SemiBold',
     color: '#374151',
-    marginTop: 8,
   },
   emptySubtitle: {
     fontSize: 14,
@@ -265,7 +560,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     padding: 12,
     borderRadius: 8,
-    marginBottom: 16,
+    margin: 20,
   },
   errorText: {
     fontSize: 14,
