@@ -140,7 +140,6 @@ export default function CreateScreen() {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* Tabs */}
         <View style={styles.tabs}>
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -164,7 +163,6 @@ export default function CreateScreen() {
           })}
         </View>
 
-        {/* Content Input */}
         <View style={styles.inputSection}>
           {activeTab === 'text' && (
             <View>
@@ -228,7 +226,6 @@ export default function CreateScreen() {
           )}
         </View>
 
-        {/* Create Button */}
         <TouchableOpacity
           style={[styles.createButton, (!content.trim() || loading) && styles.createButtonDisabled]}
           onPress={handleCreateNote}
