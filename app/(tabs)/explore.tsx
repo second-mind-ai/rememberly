@@ -7,10 +7,11 @@ import {
   StyleSheet,
   RefreshControl,
   TextInput,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotesStore } from '@/lib/store';
-import { Search, ListFilter as Filter, Import as SortAsc, Grid2x2 as Grid, List } from 'lucide-react-native';
+import { Search, Filter, ArrowUpDown, Grid2x2 as Grid, List, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
 
 type SortOption = 'newest' | 'oldest' | 'title' | 'type';
@@ -23,10 +24,20 @@ export default function ExploreScreen() {
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterAnimation] = useState(new Animated.Value(0));
 
   useEffect(() => {
     fetchNotes();
   }, []);
+
+  useEffect(() => {
+    Animated.timing(filterAnimation, {
+      toValue: showFilters ? 1 : 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [showFilters]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -70,11 +81,23 @@ export default function ExploreScreen() {
     { value: 'type', label: 'Type' },
   ];
 
+  const activeFiltersCount = (selectedType ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0);
+
+  const filterHeight = filterAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 120],
+  });
+
+  const filterOpacity = filterAnimation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Explore Notes</Text>
+        <Text style={styles.title}>Notes</Text>
         <Text style={styles.subtitle}>Browse and search all your notes</Text>
       </View>
 
@@ -92,67 +115,114 @@ export default function ExploreScreen() {
         </View>
       </View>
 
-      {/* Filters and Controls */}
-      <View style={styles.controlsSection}>
-        <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          style={styles.filtersContainer}
+      {/* Controls Bar */}
+      <View style={styles.controlsBar}>
+        <TouchableOpacity
+          style={[styles.filtersButton, activeFiltersCount > 0 && styles.filtersButtonActive]}
+          onPress={() => setShowFilters(!showFilters)}
         >
-          <TouchableOpacity
-            style={[styles.filterChip, selectedType === null && styles.filterChipActive]}
-            onPress={() => setSelectedType(null)}
-          >
-            <Text style={[styles.filterChipText, selectedType === null && styles.filterChipTextActive]}>
-              All
-            </Text>
-          </TouchableOpacity>
-          
-          {noteTypes.map((type) => (
-            <TouchableOpacity
-              key={type}
-              style={[styles.filterChip, selectedType === type && styles.filterChipActive]}
-              onPress={() => setSelectedType(selectedType === type ? null : type)}
-            >
-              <Text style={[styles.filterChipText, selectedType === type && styles.filterChipTextActive]}>
-                {type.charAt(0).toUpperCase() + type.slice(1)}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+          <Filter size={18} color={activeFiltersCount > 0 ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+          <Text style={[styles.filtersButtonText, activeFiltersCount > 0 && styles.filtersButtonTextActive]}>
+            Filters
+          </Text>
+          {activeFiltersCount > 0 && (
+            <View style={styles.filtersBadge}>
+              <Text style={styles.filtersBadgeText}>{activeFiltersCount}</Text>
+            </View>
+          )}
+          {showFilters ? (
+            <ChevronUp size={16} color={activeFiltersCount > 0 ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+          ) : (
+            <ChevronDown size={16} color={activeFiltersCount > 0 ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+          )}
+        </TouchableOpacity>
 
         <View style={styles.controlsRight}>
-          <TouchableOpacity 
-            style={styles.controlButton}
-            onPress={() => {
-              const currentIndex = sortOptions.findIndex(option => option.value === sortBy);
-              const nextIndex = (currentIndex + 1) % sortOptions.length;
-              setSortBy(sortOptions[nextIndex].value);
-            }}
-          >
-            <SortAsc size={20} color="#6B7280" strokeWidth={2} />
-          </TouchableOpacity>
-          
           <TouchableOpacity 
             style={styles.controlButton}
             onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}
           >
             {viewMode === 'list' ? (
-              <Grid size={20} color="#6B7280" strokeWidth={2} />
+              <Grid size={18} color="#6B7280" strokeWidth={2} />
             ) : (
-              <List size={20} color="#6B7280" strokeWidth={2} />
+              <List size={18} color="#6B7280" strokeWidth={2} />
             )}
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Sort Indicator */}
-      <View style={styles.sortIndicator}>
-        <Text style={styles.sortText}>
-          Sorted by: {sortOptions.find(option => option.value === sortBy)?.label}
-        </Text>
-        <Text style={styles.countText}>
+      {/* Collapsible Filters Section */}
+      <Animated.View 
+        style={[
+          styles.filtersSection,
+          {
+            height: filterHeight,
+            opacity: filterOpacity,
+          }
+        ]}
+      >
+        <View style={styles.filtersContent}>
+          {/* Type Filters */}
+          <View style={styles.filterGroup}>
+            <Text style={styles.filterGroupTitle}>Type</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterChipsContainer}
+            >
+              <TouchableOpacity
+                style={[styles.filterChip, selectedType === null && styles.filterChipActive]}
+                onPress={() => setSelectedType(null)}
+              >
+                <Text style={[styles.filterChipText, selectedType === null && styles.filterChipTextActive]}>
+                  All
+                </Text>
+              </TouchableOpacity>
+              
+              {noteTypes.map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[styles.filterChip, selectedType === type && styles.filterChipActive]}
+                  onPress={() => setSelectedType(selectedType === type ? null : type)}
+                >
+                  <Text style={[styles.filterChipText, selectedType === type && styles.filterChipTextActive]}>
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Sort Options */}
+          <View style={styles.filterGroup}>
+            <Text style={styles.filterGroupTitle}>Sort by</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterChipsContainer}
+            >
+              {sortOptions.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.filterChip, sortBy === option.value && styles.filterChipActive]}
+                  onPress={() => setSortBy(option.value)}
+                >
+                  <ArrowUpDown size={14} color={sortBy === option.value ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+                  <Text style={[styles.filterChipText, sortBy === option.value && styles.filterChipTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Animated.View>
+
+      {/* Results Summary */}
+      <View style={styles.resultsBar}>
+        <Text style={styles.resultsText}>
           {filteredAndSortedNotes.length} note{filteredAndSortedNotes.length !== 1 ? 's' : ''}
+          {searchQuery && ` matching "${searchQuery}"`}
         </Text>
       </View>
 
@@ -247,35 +317,47 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#111827',
   },
-  controlsSection: {
+  controlsBar: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  filtersContainer: {
-    flex: 1,
-    marginRight: 16,
-  },
-  filterChip: {
+  filtersButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: '#F3F4F6',
-    marginRight: 8,
+    gap: 6,
   },
-  filterChipActive: {
+  filtersButtonActive: {
     backgroundColor: '#2563EB',
   },
-  filterChipText: {
+  filtersButtonText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#6B7280',
   },
-  filterChipTextActive: {
+  filtersButtonTextActive: {
+    color: '#ffffff',
+  },
+  filtersBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  filtersBadgeText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
     color: '#ffffff',
   },
   controlsRight: {
@@ -287,25 +369,63 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#F3F4F6',
   },
-  sortIndicator: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  filtersSection: {
+    backgroundColor: '#F8FAFC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  filtersContent: {
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingVertical: 16,
+    gap: 16,
+  },
+  filterGroup: {
+    gap: 8,
+  },
+  filterGroupTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+  },
+  filterChipsContainer: {
+    flexDirection: 'row',
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    marginRight: 8,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  filterChipActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontFamily: 'Inter-Medium',
+    color: '#6B7280',
+  },
+  filterChipTextActive: {
+    color: '#ffffff',
+  },
+  resultsBar: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
     backgroundColor: '#F8FAFC',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  sortText: {
+  resultsText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#6B7280',
-  },
-  countText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
   },
   content: {
     flex: 1,
