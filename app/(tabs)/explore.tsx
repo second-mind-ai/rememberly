@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotesStore } from '@/lib/store';
-import { Search, Filter, SortAsc, Grid, List } from 'lucide-react-native';
+import { Search, ListFilter as Filter, Import as SortAsc, Grid2x2 as Grid, List } from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
 
 type SortOption = 'newest' | 'oldest' | 'title' | 'type';
