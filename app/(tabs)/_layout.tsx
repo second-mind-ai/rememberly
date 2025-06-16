@@ -10,13 +10,13 @@ const getBottomPadding = () => {
     return 20; // iOS safe area
   }
   
-  // Android - more generous padding for Galaxy Note 9 and similar devices
+  // Android - proper bottom padding for gesture navigation
   if (screenHeight > 800) {
-    return 20; // Larger Android devices
+    return 24; // Larger Android devices
   } else if (screenHeight > 700) {
-    return 18; // Medium Android devices (like Galaxy Note 9) - increased
+    return 22; // Medium Android devices (like Galaxy Note 9) - increased for gestures
   } else {
-    return 16; // Smaller Android devices
+    return 20; // Smaller Android devices
   }
 };
 
@@ -25,13 +25,13 @@ const getTabBarHeight = () => {
     return 88;
   }
   
-  // Android - much more generous height for better text visibility
+  // Android - balanced height for proper text display
   if (screenHeight > 800) {
-    return 84;
-  } else if (screenHeight > 700) {
-    return 80; // Galaxy Note 9 and similar - significantly increased
-  } else {
     return 76;
+  } else if (screenHeight > 700) {
+    return 74; // Galaxy Note 9 - balanced for text visibility
+  } else {
+    return 72;
   }
 };
 
@@ -46,7 +46,7 @@ export default function TabLayout() {
           backgroundColor: '#ffffff',
           borderTopColor: '#E5E7EB',
           paddingBottom: getBottomPadding(),
-          paddingTop: 20, // Increased top padding for better text visibility
+          paddingTop: 12, // Reduced top padding to give more space for text
           height: getTabBarHeight(),
           borderTopWidth: 1,
           elevation: 12,
@@ -56,25 +56,26 @@ export default function TabLayout() {
           shadowRadius: 12,
           // Ensure proper spacing from screen edges
           marginHorizontal: 0,
-          paddingHorizontal: 12, // Increased horizontal padding
+          paddingHorizontal: 8, // Reduced horizontal padding
         },
         tabBarLabelStyle: {
           fontFamily: 'Inter-Medium',
-          fontSize: 13, // Slightly larger font
-          marginTop: 8, // More spacing between icon and label
-          marginBottom: 4, // Bottom margin for text
-          lineHeight: 16, // Explicit line height
+          fontSize: 12, // Standard font size
+          marginTop: 4, // Reduced spacing between icon and label
+          marginBottom: 2, // Small bottom margin for text
+          lineHeight: 14, // Tighter line height
         },
         tabBarIconStyle: {
-          marginTop: 8, // More top margin for icons
-          marginBottom: 2, // Small bottom margin
+          marginTop: 4, // Reduced top margin for icons
+          marginBottom: 0, // No bottom margin
         },
         // Improve touch area and text positioning
         tabBarItemStyle: {
-          paddingVertical: 6, // Increased vertical padding
-          paddingHorizontal: 4, // Horizontal padding for touch area
+          paddingVertical: 4, // Reduced vertical padding
+          paddingHorizontal: 2, // Minimal horizontal padding
           justifyContent: 'center',
           alignItems: 'center',
+          flex: 1,
         },
         // Better active indicator
         tabBarIndicatorStyle: {
