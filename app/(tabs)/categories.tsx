@@ -9,8 +9,10 @@ import {
   TextInput,
   Modal,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useNotesStore } from '@/lib/store';
 import { Search, Plus, Heart, DollarSign, Newspaper, Settings, Briefcase, LocationEdit as Edit3, Trash2, Sparkles, X, Check, ArrowLeft } from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
@@ -52,6 +54,7 @@ export default function CategoriesScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDescription, setNewCategoryDescription] = useState('');
+  const [scrollPosition, setScrollPosition] = useState(0);
   const [userCategories, setUserCategories] = useState<UserCategory[]>([
     {
       id: 'work-projects',
@@ -72,6 +75,29 @@ export default function CategoriesScreen() {
   useEffect(() => {
     fetchNotes();
   }, []);
+
+  // Handle hardware/system back button
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (showAddModal) {
+          setShowAddModal(false);
+          return true; // Prevent default behavior
+        }
+        
+        if (selectedCategory) {
+          handleBackPress();
+          return true; // Prevent default behavior
+        }
+        
+        return false; // Allow default behavior (exit app or go to previous screen)
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => subscription.remove();
+    }, [selectedCategory, showAddModal])
+  );
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -122,7 +148,19 @@ export default function CategoriesScreen() {
   }
 
   function handleBackPress() {
+    // Store current scroll position before going back
     setSelectedCategory(null);
+    // Scroll position will be restored when returning to main categories view
+  }
+
+  function handleCategorySelect(categoryId: string) {
+    setSelectedCategory(categoryId);
+  }
+
+  function handleScrollPositionChange(event: any) {
+    if (!selectedCategory) {
+      setScrollPosition(event.nativeEvent.contentOffset.y);
+    }
   }
 
   // AI-generated categories based on common tags
@@ -227,6 +265,7 @@ export default function CategoriesScreen() {
           <TouchableOpacity 
             onPress={handleBackPress}
             style={styles.backButton}
+            activeOpacity={0.7}
           >
             <ArrowLeft size={20} color="#475569" strokeWidth={2} />
             <Text style={styles.backText}>Categories</Text>
@@ -241,6 +280,7 @@ export default function CategoriesScreen() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
           }
+          showsVerticalScrollIndicator={true}
         >
           {filteredNotes.length > 0 ? (
             <View style={styles.notesContainer}>
@@ -269,6 +309,7 @@ export default function CategoriesScreen() {
           <TouchableOpacity 
             style={styles.addButton}
             onPress={() => setShowAddModal(true)}
+            activeOpacity={0.7}
           >
             <Plus size={20} color="#6B7280" strokeWidth={2} />
           </TouchableOpacity>
@@ -281,6 +322,10 @@ export default function CategoriesScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
+        onScroll={handleScrollPositionChange}
+        scrollEventThrottle={16}
+        contentOffset={{ x: 0, y: scrollPosition }}
+        showsVerticalScrollIndicator={true}
       >
         {/* AI-Tagged Categories */}
         <View style={styles.section}>
@@ -296,7 +341,7 @@ export default function CategoriesScreen() {
                 <TouchableOpacity
                   key={category.id}
                   style={[styles.categoryCard, { backgroundColor: category.backgroundColor }]}
-                  onPress={() => setSelectedCategory(category.id)}
+                  onPress={() => handleCategorySelect(category.id)}
                   activeOpacity={0.7}
                 >
                   <View style={styles.categoryHeader}>
@@ -323,6 +368,7 @@ export default function CategoriesScreen() {
             <TouchableOpacity 
               style={styles.addNewButton}
               onPress={() => setShowAddModal(true)}
+              activeOpacity={0.7}
             >
               <Text style={styles.addNewText}>Add New</Text>
             </TouchableOpacity>
@@ -341,12 +387,16 @@ export default function CategoriesScreen() {
                   </View>
                 </View>
                 <View style={styles.userCategoryActions}>
-                  <TouchableOpacity style={styles.actionButton}>
+                  <TouchableOpacity 
+                    style={styles.actionButton}
+                    activeOpacity={0.7}
+                  >
                     <Edit3 size={16} color="#6B7280" strokeWidth={2} />
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={styles.actionButton}
                     onPress={() => handleDeleteCategory(category.id)}
+                    activeOpacity={0.7}
                   >
                     <Trash2 size={16} color="#DC2626" strokeWidth={2} />
                   </TouchableOpacity>
@@ -390,6 +440,7 @@ export default function CategoriesScreen() {
             <TouchableOpacity 
               onPress={() => setShowAddModal(false)}
               style={styles.modalCloseButton}
+              activeOpacity={0.7}
             >
               <X size={24} color="#6B7280" strokeWidth={2} />
             </TouchableOpacity>
@@ -397,6 +448,7 @@ export default function CategoriesScreen() {
             <TouchableOpacity 
               onPress={handleAddCategory}
               style={styles.modalSaveButton}
+              activeOpacity={0.7}
             >
               <Check size={24} color="#059669" strokeWidth={2} />
             </TouchableOpacity>
@@ -412,6 +464,7 @@ export default function CategoriesScreen() {
                 placeholder="Enter category name"
                 placeholderTextColor="#9CA3AF"
                 maxLength={50}
+                autoFocus={true}
               />
             </View>
 
