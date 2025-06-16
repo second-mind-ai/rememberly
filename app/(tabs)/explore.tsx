@@ -9,19 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotesStore } from '@/lib/store';
-import { 
-  Search, 
-  Plus, 
-  Heart, 
-  DollarSign, 
-  Newspaper, 
-  Settings, 
-  Briefcase, 
-  Home,
-  Edit3,
-  Trash2,
-  Sparkles
-} from 'lucide-react-native';
+import { Search, Plus, Heart, DollarSign, Newspaper, Settings, Briefcase, Chrome as Home, LocationEdit as Edit3, Trash2, Sparkles } from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
 
 interface Category {
