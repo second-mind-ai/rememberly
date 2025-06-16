@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useNotesStore } from '@/lib/store';
 import { useReminderStore } from '@/lib/reminderStore';
-import { ArrowLeft, Calendar, Bell, Edit3, Trash2, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Bell, LocationEdit as Edit3, Trash2, ExternalLink } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Database } from '@/lib/supabase';
 
