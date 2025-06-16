@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotesStore } from '@/lib/store';
-import { Search, Plus, Heart, DollarSign, Newspaper, Settings, Briefcase, LocationEdit as Edit3, Trash2, Sparkles, X, Check } from 'lucide-react-native';
+import { Search, Plus, Heart, DollarSign, Newspaper, Settings, Briefcase, LocationEdit as Edit3, Trash2, Sparkles, X, Check, ArrowLeft } from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
 
 interface Category {
@@ -121,6 +121,10 @@ export default function CategoriesScreen() {
     );
   }
 
+  function handleBackPress() {
+    setSelectedCategory(null);
+  }
+
   // AI-generated categories based on common tags
   const aiCategories: Category[] = [
     {
@@ -221,10 +225,11 @@ export default function CategoriesScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity 
-            onPress={() => setSelectedCategory(null)}
+            onPress={handleBackPress}
             style={styles.backButton}
           >
-            <Text style={styles.backText}>← Categories</Text>
+            <ArrowLeft size={20} color="#475569" strokeWidth={2} />
+            <Text style={styles.backText}>Categories</Text>
           </TouchableOpacity>
           <Text style={styles.categoryTitle}>
             {aiCategories.find(cat => cat.id === selectedCategory)?.name}
@@ -268,6 +273,7 @@ export default function CategoriesScreen() {
             <Plus size={20} color="#6B7280" strokeWidth={2} />
           </TouchableOpacity>
         </View>
+        <Text style={styles.subtitle}>Organize your notes intelligently</Text>
       </View>
 
       <ScrollView
@@ -460,11 +466,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 4,
   },
   title: {
     fontSize: 28,
     fontFamily: 'Inter-Bold',
     color: '#0F172A',
+  },
+  subtitle: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
   },
   addButton: {
     width: 40,
@@ -475,12 +487,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingVertical: 8,
     paddingHorizontal: 12,
     backgroundColor: '#F1F5F9',
     borderRadius: 8,
     alignSelf: 'flex-start',
     marginBottom: 12,
+    gap: 6,
   },
   backText: {
     fontSize: 14,
