@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
-import { FileText, Link2, Image as ImageIcon, Calendar } from 'lucide-react-native';
+import { FileText, Link2, Image as ImageIcon, Calendar, Brain } from 'lucide-react-native';
 import { Database } from '@/lib/supabase';
 
 type Note = Database['public']['Tables']['notes']['Row'];
@@ -48,9 +48,16 @@ export function NoteCard({ note }: NoteCardProps) {
         <View style={styles.typeContainer}>
           {getTypeIcon()}
         </View>
-        <View style={styles.dateContainer}>
-          <Calendar size={12} color="#9CA3AF" strokeWidth={2} />
-          <Text style={styles.dateText}>{formatDate(note.created_at)}</Text>
+        <View style={styles.headerRight}>
+          <View style={styles.dateContainer}>
+            <Calendar size={12} color="#9CA3AF" strokeWidth={2} />
+            <Text style={styles.dateText}>{formatDate(note.created_at)}</Text>
+          </View>
+          {note.summary && (
+            <View style={styles.aiIndicator}>
+              <Brain size={12} color="#7C3AED" strokeWidth={2} />
+            </View>
+          )}
         </View>
       </View>
 
@@ -61,6 +68,15 @@ export function NoteCard({ note }: NoteCardProps) {
       <Text style={styles.summary} numberOfLines={3}>
         {note.summary || note.original_content}
       </Text>
+
+      {note.source_url && (
+        <View style={styles.sourceContainer}>
+          <Link2 size={12} color="#6B7280" strokeWidth={2} />
+          <Text style={styles.sourceText} numberOfLines={1}>
+            {note.source_url}
+          </Text>
+        </View>
+      )}
 
       {note.tags && note.tags.length > 0 && (
         <View style={styles.tagsContainer}>
@@ -105,6 +121,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -114,6 +135,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
+  },
+  aiIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 16,
@@ -128,6 +157,22 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 20,
     marginBottom: 12,
+  },
+  sourceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 6,
+  },
+  sourceText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    flex: 1,
   },
   tagsContainer: {
     flexDirection: 'row',

@@ -15,7 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useNotesStore } from '@/lib/store';
 import { summarizeContent, fetchUrlContent } from '@/lib/ai';
-import { FileText, Link2, Image as ImageIcon, Camera, Upload } from 'lucide-react-native';
+import { FileText, Link2, Image as ImageIcon, Camera, Upload, Sparkles, Brain } from 'lucide-react-native';
 
 type NoteType = 'text' | 'url' | 'file' | 'image';
 
@@ -23,7 +23,25 @@ export default function CreateScreen() {
   const [activeTab, setActiveTab] = useState<NoteType>('text');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [analysisPreview, setAnalysisPreview] = useState<any>(null);
   const { createNote } = useNotesStore();
+
+  async function handleAnalyzeContent() {
+    if (!content.trim()) {
+      Alert.alert('Error', 'Please enter some content to analyze');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await summarizeContent(content, activeTab);
+      setAnalysisPreview(result);
+    } catch (error) {
+      Alert.alert('Analysis Error', error instanceof Error ? error.message : 'Failed to analyze content');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleCreateNote() {
     if (!content.trim()) {
@@ -34,6 +52,7 @@ export default function CreateScreen() {
     setLoading(true);
     try {
       let finalContent = content;
+      let aiResult;
 
       // If it's a URL, fetch the content
       if (activeTab === 'url') {
@@ -46,8 +65,8 @@ export default function CreateScreen() {
         }
       }
 
-      // Get AI summary
-      const aiResult = await summarizeContent(finalContent, activeTab);
+      // Get AI analysis
+      aiResult = await summarizeContent(finalContent, activeTab);
 
       // Create note
       const noteData = {
@@ -64,9 +83,12 @@ export default function CreateScreen() {
       
       if (newNote) {
         Alert.alert('Success', 'Note created successfully!', [
-          { text: 'OK', onPress: () => router.push('/(tabs)') }
+          { text: 'OK', onPress: () => {
+            setContent('');
+            setAnalysisPreview(null);
+            router.push('/(tabs)');
+          }}
         ]);
-        setContent('');
       } else {
         Alert.alert('Error', 'Failed to create note');
       }
@@ -135,7 +157,13 @@ export default function CreateScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Create Note</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.title}>Create Note</Text>
+          <View style={styles.aiIndicator}>
+            <Brain size={16} color="#7C3AED" strokeWidth={2} />
+            <Text style={styles.aiText}>AI Powered</Text>
+          </View>
+        </View>
         <Text style={styles.subtitle}>Capture and let AI organize your thoughts</Text>
       </View>
 
@@ -190,6 +218,9 @@ export default function CreateScreen() {
                 autoCapitalize="none"
                 autoCorrect={false}
               />
+              <Text style={styles.helpText}>
+                Paste any web article, blog post, or webpage URL for AI analysis
+              </Text>
             </View>
           )}
 
@@ -226,6 +257,70 @@ export default function CreateScreen() {
           )}
         </View>
 
+        {/* AI Analysis Preview Button */}
+        {content.trim() && !analysisPreview && (
+          <TouchableOpacity
+            style={[styles.analyzeButton, loading && styles.buttonDisabled]}
+            onPress={handleAnalyzeContent}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#7C3AED" />
+            ) : (
+              <>
+                <Sparkles size={16} color="#7C3AED" strokeWidth={2} />
+                <Text style={styles.analyzeButtonText}>Preview AI Analysis</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* AI Analysis Preview */}
+        {analysisPreview && (
+          <View style={styles.previewSection}>
+            <View style={styles.previewHeader}>
+              <Sparkles size={16} color="#7C3AED" strokeWidth={2} />
+              <Text style={styles.previewTitle}>AI Analysis Preview</Text>
+            </View>
+            
+            <View style={styles.previewCard}>
+              <Text style={styles.previewItemTitle}>Title</Text>
+              <Text style={styles.previewItemContent}>{analysisPreview.title}</Text>
+              
+              <Text style={styles.previewItemTitle}>Summary</Text>
+              <Text style={styles.previewItemContent}>{analysisPreview.summary}</Text>
+              
+              <Text style={styles.previewItemTitle}>Tags</Text>
+              <View style={styles.previewTags}>
+                {analysisPreview.tags.map((tag: string, index: number) => (
+                  <View key={index} style={styles.previewTag}>
+                    <Text style={styles.previewTagText}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {analysisPreview.analysis && (
+                <>
+                  <Text style={styles.previewItemTitle}>Category</Text>
+                  <Text style={styles.previewItemContent}>{analysisPreview.analysis.category}</Text>
+                  
+                  <Text style={styles.previewItemTitle}>Sentiment</Text>
+                  <View style={[styles.sentimentBadge, { backgroundColor: getSentimentColor(analysisPreview.analysis.sentiment) }]}>
+                    <Text style={styles.sentimentText}>{analysisPreview.analysis.sentiment.toUpperCase()}</Text>
+                  </View>
+                </>
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={styles.editPreviewButton}
+              onPress={() => setAnalysisPreview(null)}
+            >
+              <Text style={styles.editPreviewText}>Edit Content</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <TouchableOpacity
           style={[styles.createButton, (!content.trim() || loading) && styles.createButtonDisabled]}
           onPress={handleCreateNote}
@@ -234,18 +329,31 @@ export default function CreateScreen() {
           {loading ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text style={styles.createButtonText}>Create Note</Text>
+            <>
+              <Brain size={16} color="#ffffff" strokeWidth={2} />
+              <Text style={styles.createButtonText}>Create Note with AI</Text>
+            </>
           )}
         </TouchableOpacity>
 
         {loading && (
           <View style={styles.loadingSection}>
-            <Text style={styles.loadingText}>AI is processing your content...</Text>
+            <Text style={styles.loadingText}>
+              {analysisPreview ? 'Creating your note...' : 'AI is analyzing your content...'}
+            </Text>
           </View>
         )}
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function getSentimentColor(sentiment: string): string {
+  switch (sentiment) {
+    case 'positive': return '#10B981';
+    case 'negative': return '#EF4444';
+    default: return '#6B7280';
+  }
 }
 
 const styles = StyleSheet.create({
@@ -260,11 +368,30 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   title: {
     fontSize: 28,
     fontFamily: 'Inter-Bold',
     color: '#111827',
-    marginBottom: 4,
+  },
+  aiIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  aiText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#7C3AED',
   },
   subtitle: {
     fontSize: 16,
@@ -303,7 +430,7 @@ const styles = StyleSheet.create({
     color: '#2563EB',
   },
   inputSection: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   inputLabel: {
     fontSize: 16,
@@ -331,6 +458,13 @@ const styles = StyleSheet.create({
     color: '#111827',
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginBottom: 8,
+  },
+  helpText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    fontStyle: 'italic',
   },
   fileSection: {
     gap: 16,
@@ -380,12 +514,103 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
   },
+  analyzeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#7C3AED',
+    borderRadius: 12,
+    paddingVertical: 12,
+    gap: 8,
+    marginBottom: 24,
+  },
+  analyzeButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#7C3AED',
+  },
+  previewSection: {
+    marginBottom: 24,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  previewTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  previewCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 12,
+  },
+  previewItemTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  previewItemContent: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  previewTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  previewTag: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  previewTagText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#2563EB',
+  },
+  sentimentBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  sentimentText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Bold',
+    color: '#ffffff',
+  },
+  editPreviewButton: {
+    alignSelf: 'center',
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  editPreviewText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#7C3AED',
+  },
   createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#2563EB',
     borderRadius: 12,
     paddingVertical: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
   },
   createButtonDisabled: {
     opacity: 0.6,
@@ -394,6 +619,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-SemiBold',
     color: '#ffffff',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   loadingSection: {
     alignItems: 'center',

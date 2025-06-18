@@ -14,9 +14,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useNotesStore } from '@/lib/store';
 import { useReminderStore } from '@/lib/reminderStore';
-import { ArrowLeft, Calendar, Bell, LocationEdit as Edit3, Trash2, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Bell, LocationEdit as Edit3, Trash2, ExternalLink, Brain } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Database } from '@/lib/supabase';
+import { ContentAnalysisCard } from '@/components/ContentAnalysisCard';
+import { ContentAnalysis } from '@/lib/openai';
 
 type Note = Database['public']['Tables']['notes']['Row'];
 
@@ -36,6 +38,23 @@ export default function NoteDetailScreen() {
     dateTime: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
     priority: 'medium' as 'low' | 'medium' | 'high',
   });
+
+  // Parse analysis data if available
+  const getAnalysisData = (): ContentAnalysis | null => {
+    if (!note?.summary) return null;
+    
+    try {
+      // Check if the summary contains structured analysis data
+      // This would be set when creating notes with the new AI integration
+      const analysisMatch = note.summary.match(/\{.*"category".*\}/s);
+      if (analysisMatch) {
+        return JSON.parse(analysisMatch[0]);
+      }
+    } catch (error) {
+      // If parsing fails, return null to show regular summary
+    }
+    return null;
+  };
 
   useEffect(() => {
     const foundNote = notes.find(n => n.id === id);
@@ -141,6 +160,8 @@ export default function NoteDetailScreen() {
     );
   }
 
+  const analysisData = getAnalysisData();
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -167,7 +188,15 @@ export default function NoteDetailScreen() {
 
       <ScrollView style={styles.content}>
         <View style={styles.noteSection}>
-          <Text style={styles.noteTitle}>{note.title}</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.noteTitle}>{note.title}</Text>
+            {note.summary && (
+              <View style={styles.aiIndicator}>
+                <Brain size={16} color="#7C3AED" strokeWidth={2} />
+                <Text style={styles.aiText}>AI</Text>
+              </View>
+            )}
+          </View>
           
           <View style={styles.noteMeta}>
             <View style={styles.typeIndicator}>
@@ -183,12 +212,28 @@ export default function NoteDetailScreen() {
             </Text>
           </View>
 
-          {note.summary && (
+          {note.source_url && (
+            <View style={styles.sourceSection}>
+              <Text style={styles.sectionTitle}>Source URL</Text>
+              <TouchableOpacity style={styles.sourceUrl} onPress={handleOpenUrl}>
+                <ExternalLink size={16} color="#2563EB" strokeWidth={2} />
+                <Text style={styles.sourceUrlText} numberOfLines={1}>
+                  {note.source_url}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {analysisData ? (
+            <View style={styles.analysisSection}>
+              <ContentAnalysisCard analysis={analysisData} />
+            </View>
+          ) : note.summary ? (
             <View style={styles.summarySection}>
               <Text style={styles.sectionTitle}>AI Summary</Text>
               <Text style={styles.summaryText}>{note.summary}</Text>
             </View>
-          )}
+          ) : null}
 
           <View style={styles.contentSection}>
             <Text style={styles.sectionTitle}>Original Content</Text>
@@ -375,12 +420,33 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 12,
+  },
   noteTitle: {
+    flex: 1,
     fontSize: 24,
     fontFamily: 'Inter-Bold',
     color: '#111827',
     lineHeight: 32,
-    marginBottom: 16,
+  },
+  aiIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  aiText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#7C3AED',
   },
   noteMeta: {
     flexDirection: 'row',
@@ -406,6 +472,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+  },
+  sourceSection: {
+    marginBottom: 24,
+  },
+  sourceUrl: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  sourceUrlText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#2563EB',
+  },
+  analysisSection: {
+    marginBottom: 24,
   },
   summarySection: {
     marginBottom: 24,

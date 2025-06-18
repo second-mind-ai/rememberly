@@ -1,22 +1,44 @@
-// AI service for summarization and processing
+import { analyzeContent, fetchUrlContent, ContentAnalysis } from './openai';
+
+// Updated AI service to use OpenAI
 export async function summarizeContent(content: string, type: 'text' | 'url' | 'file' = 'text'): Promise<{
   title: string;
   summary: string;
   tags: string[];
+  analysis?: ContentAnalysis;
 }> {
   try {
-    // Mock AI response for now - replace with actual AI service
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API delay
+    let processedContent = content;
     
-    // Simple title extraction
+    // If it's a URL, fetch the content first
+    if (type === 'url') {
+      try {
+        processedContent = await fetchUrlContent(content);
+      } catch (error) {
+        console.error('URL fetch error:', error);
+        throw new Error('Could not fetch content from the provided URL');
+      }
+    }
+
+    // Analyze content with OpenAI
+    const analysis = await analyzeContent(processedContent, type === 'url' ? content : undefined);
+    
+    return {
+      title: analysis.title,
+      summary: analysis.summary,
+      tags: analysis.tags,
+      analysis
+    };
+  } catch (error) {
+    console.error('AI summarization error:', error);
+    
+    // Fallback to simple processing if OpenAI fails
     const lines = content.split('\n').filter(line => line.trim());
     const title = lines[0]?.substring(0, 50) + (lines[0]?.length > 50 ? '...' : '') || 'Untitled Note';
     
-    // Simple summary (first few sentences)
     const sentences = content.split(/[.!?]+/).filter(s => s.trim());
     const summary = sentences.slice(0, 2).join('. ').trim() + (sentences.length > 2 ? '.' : '');
     
-    // Simple tag extraction based on common words
     const words = content.toLowerCase().match(/\b\w{4,}\b/g) || [];
     const commonWords = ['this', 'that', 'with', 'have', 'will', 'been', 'from', 'they', 'know', 'want', 'were', 'said'];
     const tags = [...new Set(words)]
@@ -26,25 +48,9 @@ export async function summarizeContent(content: string, type: 'text' | 'url' | '
     return {
       title,
       summary: summary || content.substring(0, 100) + '...',
-      tags
-    };
-  } catch (error) {
-    console.error('AI summarization error:', error);
-    return {
-      title: 'Error Processing Content',
-      summary: 'Could not process this content automatically.',
-      tags: ['error']
+      tags: tags.length > 0 ? tags : ['note']
     };
   }
 }
 
-export async function fetchUrlContent(url: string): Promise<string> {
-  try {
-    // In a real app, you'd use a service to fetch and parse URL content
-    // For now, return the URL as content
-    return `Content from: ${url}\n\nThis is a placeholder for the actual webpage content that would be extracted by a web scraping service.`;
-  } catch (error) {
-    console.error('URL fetch error:', error);
-    throw new Error('Could not fetch URL content');
-  }
-}
+export { fetchUrlContent };
