@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,13 @@ export default function HomeScreen() {
   const { notes, loading, fetchNotes, error } = useNotesStore();
   const [user, setUser] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     checkAuth();
@@ -30,14 +37,20 @@ export default function HomeScreen() {
     if (!user) {
       router.replace('/auth/login');
     } else {
-      setUser(user);
+      if (isMounted.current) {
+        setUser(user);
+      }
     }
   }
 
   async function handleRefresh() {
-    setRefreshing(true);
+    if (isMounted.current) {
+      setRefreshing(true);
+    }
     await fetchNotes();
-    setRefreshing(false);
+    if (isMounted.current) {
+      setRefreshing(false);
+    }
   }
 
   async function handleSignOut() {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,13 @@ export default function ExploreScreen() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [filterAnimation] = useState(new Animated.Value(0));
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     fetchNotes();
@@ -40,9 +47,13 @@ export default function ExploreScreen() {
   }, [showFilters]);
 
   async function handleRefresh() {
-    setRefreshing(true);
+    if (isMounted.current) {
+      setRefreshing(true);
+    }
     await fetchNotes();
-    setRefreshing(false);
+    if (isMounted.current) {
+      setRefreshing(false);
+    }
   }
 
   // Filter and sort notes

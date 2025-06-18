@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -43,6 +43,7 @@ export default function RemindersScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
+  const isMounted = useRef(true);
   
   const [formData, setFormData] = useState<ReminderFormData>({
     title: '',
@@ -52,33 +53,49 @@ export default function RemindersScreen() {
   });
 
   useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     initializeReminders();
   }, []);
 
   async function initializeReminders() {
     try {
       const token = await registerForPushNotificationsAsync();
-      setHasPermission(!!token);
+      if (isMounted.current) {
+        setHasPermission(!!token);
+      }
     } catch (error) {
       console.error('Failed to register for notifications:', error);
-      setHasPermission(false);
+      if (isMounted.current) {
+        setHasPermission(false);
+      }
     }
     await fetchReminders();
   }
 
   async function handleRefresh() {
-    setRefreshing(true);
+    if (isMounted.current) {
+      setRefreshing(true);
+    }
     await fetchReminders();
-    setRefreshing(false);
+    if (isMounted.current) {
+      setRefreshing(false);
+    }
   }
 
   function resetForm() {
-    setFormData({
-      title: '',
-      description: '',
-      dateTime: new Date(Date.now() + 60 * 60 * 1000),
-      priority: 'medium',
-    });
+    if (isMounted.current) {
+      setFormData({
+        title: '',
+        description: '',
+        dateTime: new Date(Date.now() + 60 * 60 * 1000),
+        priority: 'medium',
+      });
+    }
   }
 
   async function handleCreateReminder() {
@@ -103,7 +120,9 @@ export default function RemindersScreen() {
             onPress: async () => {
               try {
                 const token = await registerForPushNotificationsAsync();
-                setHasPermission(!!token);
+                if (isMounted.current) {
+                  setHasPermission(!!token);
+                }
                 if (!token) {
                   Alert.alert('Error', 'Notifications are required for reminders to work');
                   return;
@@ -133,7 +152,9 @@ export default function RemindersScreen() {
       );
 
       resetForm();
-      setShowAddModal(false);
+      if (isMounted.current) {
+        setShowAddModal(false);
+      }
     } catch (error) {
       Alert.alert('Error', 'Failed to create reminder');
     }
@@ -183,8 +204,10 @@ export default function RemindersScreen() {
   }
 
   function onDateChange(event: any, selectedDate?: Date) {
-    setShowDatePicker(false);
-    if (selectedDate) {
+    if (isMounted.current) {
+      setShowDatePicker(false);
+    }
+    if (selectedDate && isMounted.current) {
       const newDateTime = new Date(formData.dateTime);
       newDateTime.setFullYear(selectedDate.getFullYear());
       newDateTime.setMonth(selectedDate.getMonth());
@@ -194,8 +217,10 @@ export default function RemindersScreen() {
   }
 
   function onTimeChange(event: any, selectedTime?: Date) {
-    setShowTimePicker(false);
-    if (selectedTime) {
+    if (isMounted.current) {
+      setShowTimePicker(false);
+    }
+    if (selectedTime && isMounted.current) {
       const newDateTime = new Date(formData.dateTime);
       newDateTime.setHours(selectedTime.getHours());
       newDateTime.setMinutes(selectedTime.getMinutes());
@@ -244,7 +269,9 @@ export default function RemindersScreen() {
             onPress={async () => {
               try {
                 const token = await registerForPushNotificationsAsync();
-                setHasPermission(!!token);
+                if (isMounted.current) {
+                  setHasPermission(!!token);
+                }
               } catch (error) {
                 Alert.alert('Error', 'Failed to enable notifications');
               }

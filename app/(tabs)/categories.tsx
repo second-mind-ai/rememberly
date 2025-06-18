@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -71,6 +71,13 @@ export default function CategoriesScreen() {
       description: 'Personal notes and thoughts'
     }
   ]);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     fetchNotes();
@@ -81,7 +88,9 @@ export default function CategoriesScreen() {
     React.useCallback(() => {
       const onBackPress = () => {
         if (showAddModal) {
-          setShowAddModal(false);
+          if (isMounted.current) {
+            setShowAddModal(false);
+          }
           return true; // Prevent default behavior
         }
         
@@ -100,9 +109,13 @@ export default function CategoriesScreen() {
   );
 
   async function handleRefresh() {
-    setRefreshing(true);
+    if (isMounted.current) {
+      setRefreshing(true);
+    }
     await fetchNotes();
-    setRefreshing(false);
+    if (isMounted.current) {
+      setRefreshing(false);
+    }
   }
 
   function handleAddCategory() {
@@ -119,10 +132,12 @@ export default function CategoriesScreen() {
       color: CATEGORY_COLORS[userCategories.length % CATEGORY_COLORS.length],
     };
 
-    setUserCategories(prev => [...prev, newCategory]);
-    setNewCategoryName('');
-    setNewCategoryDescription('');
-    setShowAddModal(false);
+    if (isMounted.current) {
+      setUserCategories(prev => [...prev, newCategory]);
+      setNewCategoryName('');
+      setNewCategoryDescription('');
+      setShowAddModal(false);
+    }
     
     Alert.alert('Success', `Category "${newCategory.name}" created successfully!`);
   }
@@ -140,7 +155,9 @@ export default function CategoriesScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            setUserCategories(prev => prev.filter(cat => cat.id !== categoryId));
+            if (isMounted.current) {
+              setUserCategories(prev => prev.filter(cat => cat.id !== categoryId));
+            }
           },
         },
       ]
@@ -149,16 +166,20 @@ export default function CategoriesScreen() {
 
   function handleBackPress() {
     // Store current scroll position before going back
-    setSelectedCategory(null);
+    if (isMounted.current) {
+      setSelectedCategory(null);
+    }
     // Scroll position will be restored when returning to main categories view
   }
 
   function handleCategorySelect(categoryId: string) {
-    setSelectedCategory(categoryId);
+    if (isMounted.current) {
+      setSelectedCategory(categoryId);
+    }
   }
 
   function handleScrollPositionChange(event: any) {
-    if (!selectedCategory) {
+    if (!selectedCategory && isMounted.current) {
       setScrollPosition(event.nativeEvent.contentOffset.y);
     }
   }
