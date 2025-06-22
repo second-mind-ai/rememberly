@@ -218,7 +218,7 @@ export default function CreateScreen() {
               ]}
               value={content}
               onChangeText={setContent}
-              placeholder="Ask anything"
+              placeholder="Write a note, save link"
               placeholderTextColor="#9CA3AF"
               multiline
               textAlignVertical="top"
