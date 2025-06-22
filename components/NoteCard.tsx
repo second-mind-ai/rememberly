@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { FileText, Link2, Image as ImageIcon, Calendar } from 'lucide-react-native';
+import { FileText, Link2, Image as ImageIcon, Calendar, ExternalLink } from 'lucide-react-native';
 import { Database } from '@/lib/supabase';
 
 type Note = Database['public']['Tables']['notes']['Row'];
@@ -38,19 +38,49 @@ export function NoteCard({ note }: NoteCardProps) {
     });
   };
 
+  const handleOpenSourceLink = async () => {
+    if (!note.source_url) return;
+
+    try {
+      const supported = await Linking.canOpenURL(note.source_url);
+      if (supported) {
+        await Linking.openURL(note.source_url);
+      } else {
+        Alert.alert('Error', 'Cannot open this URL');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to open URL');
+    }
+  };
+
+  const handleCardPress = () => {
+    router.push(`/note/${note.id}`);
+  };
+
   return (
     <TouchableOpacity
       style={styles.card}
-      onPress={() => router.push(`/note/${note.id}`)}
+      onPress={handleCardPress}
       activeOpacity={0.7}
     >
       <View style={styles.header}>
         <View style={styles.typeContainer}>
           {getTypeIcon()}
         </View>
-        <View style={styles.dateContainer}>
-          <Calendar size={12} color="#9CA3AF" strokeWidth={2} />
-          <Text style={styles.dateText}>{formatDate(note.created_at)}</Text>
+        <View style={styles.headerRight}>
+          <View style={styles.dateContainer}>
+            <Calendar size={12} color="#9CA3AF" strokeWidth={2} />
+            <Text style={styles.dateText}>{formatDate(note.created_at)}</Text>
+          </View>
+          {note.source_url && (
+            <TouchableOpacity
+              style={styles.linkButton}
+              onPress={handleOpenSourceLink}
+              activeOpacity={0.7}
+            >
+              <ExternalLink size={14} color="#2563EB" strokeWidth={2} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -61,6 +91,20 @@ export function NoteCard({ note }: NoteCardProps) {
       <Text style={styles.summary} numberOfLines={3}>
         {note.summary || note.original_content}
       </Text>
+
+      {note.source_url && (
+        <TouchableOpacity 
+          style={styles.sourceLink}
+          onPress={handleOpenSourceLink}
+          activeOpacity={0.7}
+        >
+          <Link2 size={12} color="#2563EB" strokeWidth={2} />
+          <Text style={styles.sourceLinkText} numberOfLines={1}>
+            {note.source_url.replace(/^https?:\/\//, '').replace(/^www\./, '')}
+          </Text>
+          <ExternalLink size={12} color="#2563EB" strokeWidth={2} />
+        </TouchableOpacity>
+      )}
 
       {note.tags && note.tags.length > 0 && (
         <View style={styles.tagsContainer}>
@@ -105,6 +149,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -114,6 +163,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
+  },
+  linkButton: {
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 16,
@@ -128,6 +184,22 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 20,
     marginBottom: 12,
+  },
+  sourceLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 12,
+    gap: 6,
+  },
+  sourceLinkText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#2563EB',
+    flex: 1,
   },
   tagsContainer: {
     flexDirection: 'row',
