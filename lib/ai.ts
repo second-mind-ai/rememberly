@@ -36,7 +36,7 @@ export async function summarizeContent(content: string, type: 'text' | 'url' | '
         
         return result;
       } catch (error) {
-        console.error('GPT-4 analysis failed, falling back to local analysis:', error);
+        console.warn('GPT-4 analysis failed, falling back to local analysis:', error);
         // Fallback to local analysis on API error
         return await performEnhancedLocalAnalysis(finalContent, type);
       }
@@ -85,8 +85,8 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI API error response:', errorText);
-      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+      console.warn('OpenAI API error response:', errorText);
+      throw new Error(`OpenAI API rate limit exceeded. Please try again later.`);
     }
 
     const data = await response.json();
@@ -98,7 +98,7 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
 
     return parseAIResponse(aiResponse);
   } catch (error) {
-    console.error('GPT-4 analysis error:', error);
+    console.warn('GPT-4 analysis error:', error);
     throw error;
   }
 }
@@ -518,13 +518,44 @@ function extractKeyPhrases(content: string): string[] {
   const text = content.toLowerCase();
   const phrases: string[] = [];
   
-  // Extract noun phrases (simplified)
-  const nounPhrasePattern = /\b(?:the\s+)?(?:[\w]+\s+){0,2}[\w]+(?:\s+(?:of|for|in|on|with|by)\s+[\w]+)?\b/g;
-  const matches = text.match(nounPhrasePattern) || [];
+  // Use a simpler, safer regex pattern to avoid stack overflow
+  const words = text.split(/\s+/);
+  
+  // Extract 2-4 word phrases manually to avoid complex regex
+  for (let i = 0; i < words.length - 1; i++) {
+    // 2-word phrases
+    if (i < words.length - 1) {
+      const phrase2 = `${words[i]} ${words[i + 1]}`;
+      if (phrase2.length > 5 && phrase2.length < 30) {
+        phrases.push(phrase2);
+      }
+    }
+    
+    // 3-word phrases
+    if (i < words.length - 2) {
+      const phrase3 = `${words[i]} ${words[i + 1]} ${words[i + 2]}`;
+      if (phrase3.length > 8 && phrase3.length < 40) {
+        phrases.push(phrase3);
+      }
+    }
+    
+    // 4-word phrases
+    if (i < words.length - 3) {
+      const phrase4 = `${words[i]} ${words[i + 1]} ${words[i + 2]} ${words[i + 3]}`;
+      if (phrase4.length > 10 && phrase4.length < 50) {
+        phrases.push(phrase4);
+      }
+    }
+  }
   
   // Score and filter phrases
-  const scoredPhrases = matches
-    .filter(phrase => phrase.length > 5 && phrase.length < 50)
+  const scoredPhrases = phrases
+    .filter(phrase => {
+      // Basic filtering for meaningful phrases
+      const words = phrase.split(/\s+/);
+      return words.length >= 2 && words.length <= 4 && 
+             !words.every(word => word.length < 3); // Avoid phrases with only short words
+    })
     .map(phrase => {
       let score = 0;
       const words = phrase.split(/\s+/);
