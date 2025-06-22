@@ -9,12 +9,13 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useNotesStore } from '@/lib/store';
 import { useReminderStore } from '@/lib/reminderStore';
-import { ArrowLeft, Calendar, Bell, LocationEdit as Edit3, Trash2, ExternalLink } from 'lucide-react-native';
+import { ArrowLeft, Calendar, Bell, LocationEdit as Edit3, Trash2, ExternalLink, Globe } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Database } from '@/lib/supabase';
 
@@ -103,9 +104,18 @@ export default function NoteDetailScreen() {
     );
   }
 
-  function handleOpenUrl() {
+  async function handleOpenUrl() {
     if (note?.source_url) {
-      Alert.alert('Open URL', `Would open: ${note.source_url}`);
+      try {
+        const canOpen = await Linking.canOpenURL(note.source_url);
+        if (canOpen) {
+          await Linking.openURL(note.source_url);
+        } else {
+          Alert.alert('Error', 'Cannot open this URL');
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Failed to open URL');
+      }
     }
   }
 
@@ -156,7 +166,7 @@ export default function NoteDetailScreen() {
           </TouchableOpacity>
           {note.source_url && (
             <TouchableOpacity onPress={handleOpenUrl} style={styles.actionButton}>
-              <ExternalLink size={20} color="#6B7280" strokeWidth={2} />
+              <ExternalLink size={20} color="#2563EB" strokeWidth={2} />
             </TouchableOpacity>
           )}
           <TouchableOpacity onPress={handleDelete} style={styles.actionButton}>
@@ -182,6 +192,17 @@ export default function NoteDetailScreen() {
               })}
             </Text>
           </View>
+
+          {/* Source URL Display */}
+          {note.source_url && (
+            <TouchableOpacity style={styles.sourceUrlContainer} onPress={handleOpenUrl}>
+              <Globe size={16} color="#2563EB" strokeWidth={2} />
+              <Text style={styles.sourceUrlText} numberOfLines={1}>
+                {note.source_url}
+              </Text>
+              <ExternalLink size={14} color="#2563EB" strokeWidth={2} />
+            </TouchableOpacity>
+          )}
 
           {note.summary && (
             <View style={styles.summarySection}>
@@ -386,7 +407,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
@@ -406,6 +427,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
+  },
+  sourceUrlContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  sourceUrlText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#2563EB',
   },
   summarySection: {
     marginBottom: 24,
