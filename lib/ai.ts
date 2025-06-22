@@ -750,7 +750,7 @@ Based on your requirements, I recommend implementing a combination of Redux Tool
 
 ### 1. Redux Toolkit for Global State
 
-```typescript
+``\`typescript
 // store/index.ts
 import { configureStore } from '@reduxjs/toolkit'
 import { userApi } from './api/userApi'
