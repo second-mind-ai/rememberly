@@ -15,7 +15,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useNotesStore } from '@/lib/store';
 import { summarizeContent, fetchUrlContent } from '@/lib/ai';
-import { FileText, Link2, Image as ImageIcon, Camera, Upload, Brain, Sparkles, Check, X, Zap } from 'lucide-react-native';
+import { FileText, Link2, Image as ImageIcon, Camera, Upload, Brain, Sparkles, Check, X, Zap, Star } from 'lucide-react-native';
 
 type NoteType = 'text' | 'url' | 'file' | 'image';
 
@@ -203,7 +203,13 @@ export default function CreateScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Create Note</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.title}>Create Note</Text>
+          <View style={styles.aiIndicator}>
+            <Brain size={16} color="#7C3AED" strokeWidth={2} />
+            <Text style={styles.aiIndicatorText}>AI-Powered</Text>
+          </View>
+        </View>
         <Text style={styles.subtitle}>AI will automatically analyze and organize your content</Text>
       </View>
 
@@ -337,6 +343,7 @@ export default function CreateScreen() {
               <View style={styles.previewHeaderLeft}>
                 <Sparkles size={20} color="#7C3AED" strokeWidth={2} />
                 <Text style={styles.previewTitle}>AI Analysis Complete</Text>
+                <Star size={16} color="#F59E0B" strokeWidth={2} />
               </View>
               <TouchableOpacity onPress={handleDiscardPreview} style={styles.discardButton}>
                 <X size={16} color="#6B7280" strokeWidth={2} />
@@ -431,11 +438,30 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   title: {
     fontSize: 28,
     fontFamily: 'Inter-Bold',
     color: '#111827',
-    marginBottom: 4,
+  },
+  aiIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  aiIndicatorText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#7C3AED',
   },
   subtitle: {
     fontSize: 16,
