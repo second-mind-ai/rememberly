@@ -4,11 +4,24 @@ import Constants from 'expo-constants';
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing Supabase configuration. Please check your environment variables.');
-}
+// Provide fallback values for development to prevent crashes
+const defaultUrl = 'https://placeholder.supabase.co';
+const defaultKey = 'placeholder-key';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(
+  supabaseUrl || defaultUrl, 
+  supabaseAnonKey || defaultKey
+);
+
+// Check if we have valid configuration
+export const hasValidSupabaseConfig = () => {
+  return supabaseUrl && 
+         supabaseAnonKey && 
+         supabaseUrl !== defaultUrl && 
+         supabaseAnonKey !== defaultKey &&
+         !supabaseUrl.includes('your-project') &&
+         !supabaseAnonKey.includes('your-anon-key');
+};
 
 export type Database = {
   public: {
@@ -60,20 +73,32 @@ export type Database = {
           natural_input: string;
           is_completed: boolean;
           created_at: string;
+          title: string;
+          description: string;
+          priority: string;
+          notification_id: string | null;
         };
         Insert: {
           id?: string;
-          note_id: string;
+          note_id?: string;
           user_id: string;
           remind_at: string;
           natural_input: string;
           is_completed?: boolean;
           created_at?: string;
+          title?: string;
+          description?: string;
+          priority?: string;
+          notification_id?: string | null;
         };
         Update: {
           remind_at?: string;
           natural_input?: string;
           is_completed?: boolean;
+          title?: string;
+          description?: string;
+          priority?: string;
+          notification_id?: string | null;
         };
       };
     };

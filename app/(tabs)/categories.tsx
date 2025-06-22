@@ -80,7 +80,9 @@ export default function CategoriesScreen() {
   }, []);
 
   useEffect(() => {
-    fetchNotes();
+    if (isMounted.current) {
+      fetchNotes();
+    }
   }, []);
 
   // Handle hardware/system back button
