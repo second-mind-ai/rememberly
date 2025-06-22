@@ -16,7 +16,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useNotesStore } from '@/lib/store';
 import { summarizeContent, fetchUrlContent } from '@/lib/ai';
-import { FileText, Link2, Image as ImageIcon, Camera, Upload, Brain, Sparkles, Check, X, Zap, Star, Paperclip, Search, Mic, FolderOpen } from 'lucide-react-native';
+import { Brain, Sparkles, Check, X, Zap, Star, Search, FolderOpen, Image as ImageIcon } from 'lucide-react-native';
 
 type NoteType = 'text' | 'url' | 'file' | 'image';
 
@@ -174,6 +174,23 @@ export default function CreateScreen() {
     }
   }
 
+  function detectContentType(text: string) {
+    // Auto-detect if content is a URL
+    const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+    if (urlPattern.test(text.trim())) {
+      setActiveTab('url');
+    } else {
+      setActiveTab('text');
+    }
+  }
+
+  function handleContentChange(text: string) {
+    setContent(text);
+    if (text.trim()) {
+      detectContentType(text);
+    }
+  }
+
   const canAnalyze = content.trim() && !analyzing && !loading;
   const canCreate = content.trim() && aiPreview && !analyzing && !loading;
 
@@ -200,7 +217,7 @@ export default function CreateScreen() {
                 I18nManager.isRTL && styles.rtlText
               ]}
               value={content}
-              onChangeText={setContent}
+              onChangeText={handleContentChange}
               placeholder="Write a note, save link"
               placeholderTextColor="#9CA3AF"
               multiline
@@ -235,54 +252,19 @@ export default function CreateScreen() {
             </View>
           </View>
 
-          {/* Quick Action Buttons */}
-          <View style={styles.quickActions}>
-            <TouchableOpacity
-              style={[styles.quickActionButton, activeTab === 'text' && styles.quickActionActive]}
-              onPress={() => setActiveTab('text')}
-            >
-              <FileText size={18} color={activeTab === 'text' ? "#ffffff" : "#6B7280"} strokeWidth={2} />
-              <Text style={[styles.quickActionText, activeTab === 'text' && styles.quickActionTextActive]}>
-                Text
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.quickActionButton, activeTab === 'url' && styles.quickActionActive]}
-              onPress={() => setActiveTab('url')}
-            >
-              <Link2 size={18} color={activeTab === 'url' ? "#ffffff" : "#6B7280"} strokeWidth={2} />
-              <Text style={[styles.quickActionText, activeTab === 'url' && styles.quickActionTextActive]}>
-                URL
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.quickActionButton, activeTab === 'file' && styles.quickActionActive]}
-              onPress={() => {
-                setActiveTab('file');
-                handleDocumentPicker();
-              }}
-            >
-              <Upload size={18} color={activeTab === 'file' ? "#ffffff" : "#6B7280"} strokeWidth={2} />
-              <Text style={[styles.quickActionText, activeTab === 'file' && styles.quickActionTextActive]}>
-                File
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.quickActionButton, activeTab === 'image' && styles.quickActionActive]}
-              onPress={() => {
-                setActiveTab('image');
-                handleImagePicker();
-              }}
-            >
-              <ImageIcon size={18} color={activeTab === 'image' ? "#ffffff" : "#6B7280"} strokeWidth={2} />
-              <Text style={[styles.quickActionText, activeTab === 'image' && styles.quickActionTextActive]}>
-                Image
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {/* Content Type Indicator */}
+          {content && (
+            <View style={styles.contentTypeIndicator}>
+              <View style={styles.typeChip}>
+                <Text style={styles.typeChipText}>
+                  {activeTab === 'url' ? '🔗 Link' : 
+                   activeTab === 'file' ? '📁 File' : 
+                   activeTab === 'image' ? '🖼️ Image' : 
+                   '📝 Text'}
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* File/Image Display */}
           {(activeTab === 'file' || activeTab === 'image') && content && (
@@ -484,7 +466,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
@@ -514,35 +496,22 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#F3F4F6',
   },
-  quickActions: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
+  contentTypeIndicator: {
+    marginBottom: 12,
   },
-  quickActionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+  typeChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#DBEAFE',
   },
-  quickActionActive: {
-    backgroundColor: '#2563EB',
-    borderColor: '#2563EB',
-  },
-  quickActionText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  quickActionTextActive: {
-    color: '#ffffff',
+  typeChipText: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#2563EB',
   },
   fileDisplay: {
     backgroundColor: '#F8FAFC',
@@ -550,6 +519,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    marginBottom: 12,
   },
   selectedFile: {
     fontSize: 14,
