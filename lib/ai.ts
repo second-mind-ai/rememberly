@@ -2,6 +2,9 @@
 const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
+// Maximum content length to prevent regex stack overflow
+const MAX_CONTENT_LENGTH = 10000;
+
 export async function summarizeContent(content: string, type: 'text' | 'url' | 'file' | 'image' = 'text'): Promise<{
   title: string;
   summary: string;
@@ -104,8 +107,13 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
 }
 
 function createAnalysisPrompt(content: string, type: string): string {
-  const contentPreview = content.length > 3000 ? content.substring(0, 3000) + '...' : content;
-  const detectedLanguage = detectLanguage(content);
+  // Truncate content to prevent regex issues
+  const truncatedContent = content.length > MAX_CONTENT_LENGTH 
+    ? content.substring(0, MAX_CONTENT_LENGTH) + '...' 
+    : content;
+  
+  const contentPreview = truncatedContent.length > 3000 ? truncatedContent.substring(0, 3000) + '...' : truncatedContent;
+  const detectedLanguage = detectLanguage(truncatedContent);
   
   return `Analyze this ${type} content and provide a JSON response with exactly this structure. IMPORTANT: Respond in the same language as the input content (detected: ${detectedLanguage}).
 
@@ -214,24 +222,31 @@ async function performEnhancedLocalAnalysis(content: string, type: string): Prom
   // Simulate processing time for better UX
   await new Promise(resolve => setTimeout(resolve, 1500));
   
-  const language = detectLanguage(content);
-  const analysis = analyzeContentStructure(content);
-  const semantic = performSemanticAnalysis(content, language);
-  const contextual = extractContextualInformation(content, type);
+  // Truncate content to prevent regex stack overflow
+  const truncatedContent = content.length > MAX_CONTENT_LENGTH 
+    ? content.substring(0, MAX_CONTENT_LENGTH) 
+    : content;
+  
+  const language = detectLanguage(truncatedContent);
+  const analysis = analyzeContentStructure(truncatedContent);
+  const semantic = performSemanticAnalysis(truncatedContent, language);
+  const contextual = extractContextualInformation(truncatedContent, type);
   
   return {
-    title: generateIntelligentTitle(content, analysis, semantic, language),
-    summary: generateIntelligentSummary(content, analysis, semantic, language),
-    tags: generateIntelligentTags(content, analysis, semantic, contextual, language)
+    title: generateIntelligentTitle(truncatedContent, analysis, semantic, language),
+    summary: generateIntelligentSummary(truncatedContent, analysis, semantic, language),
+    tags: generateIntelligentTags(truncatedContent, analysis, semantic, contextual, language)
   };
 }
 
 function detectLanguage(content: string): 'ar' | 'en' | 'unknown' {
-  const text = content.toLowerCase();
+  // Truncate content for language detection to prevent regex issues
+  const truncatedContent = content.length > 1000 ? content.substring(0, 1000) : content;
+  const text = truncatedContent.toLowerCase();
   
   // Arabic detection - check for Arabic characters
   const arabicPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
-  const arabicMatches = (content.match(arabicPattern) || []).length;
+  const arabicMatches = (truncatedContent.match(arabicPattern) || []).length;
   
   // English detection
   const englishWords = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were'];
@@ -249,15 +264,20 @@ function detectLanguage(content: string): 'ar' | 'en' | 'unknown' {
 }
 
 function analyzeContentStructure(content: string) {
-  const sentences = content.split(/[.!?؟]+/).filter(s => s.trim().length > 10);
-  const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-  const words = content.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\w]+/g) || [];
+  // Truncate content to prevent regex stack overflow
+  const truncatedContent = content.length > MAX_CONTENT_LENGTH 
+    ? content.substring(0, MAX_CONTENT_LENGTH) 
+    : content;
+  
+  const sentences = truncatedContent.split(/[.!?؟]+/).filter(s => s.trim().length > 10);
+  const paragraphs = truncatedContent.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+  const words = truncatedContent.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\w]+/g) || [];
   
   // Identify key structural elements
-  const hasQuestions = /[?؟]/.test(content);
-  const hasNumbers = /\d+/.test(content);
-  const hasLists = /[-•*]\s/.test(content) || /\d+\.\s/.test(content);
-  const hasQuotes = /"[^"]*"/.test(content) || /'[^']*'/.test(content) || /«[^»]*»/.test(content);
+  const hasQuestions = /[?؟]/.test(truncatedContent);
+  const hasNumbers = /\d+/.test(truncatedContent);
+  const hasLists = /[-•*]\s/.test(truncatedContent) || /\d+\.\s/.test(truncatedContent);
+  const hasQuotes = /"[^"]*"/.test(truncatedContent) || /'[^']*'/.test(truncatedContent) || /«[^»]*»/.test(truncatedContent);
   
   // Calculate readability metrics
   const avgWordsPerSentence = sentences.length > 0 ? words.length / sentences.length : 0;
@@ -279,7 +299,12 @@ function analyzeContentStructure(content: string) {
 }
 
 function performSemanticAnalysis(content: string, language: string) {
-  const text = content.toLowerCase();
+  // Truncate content to prevent regex stack overflow
+  const truncatedContent = content.length > MAX_CONTENT_LENGTH 
+    ? content.substring(0, MAX_CONTENT_LENGTH) 
+    : content;
+  
+  const text = truncatedContent.toLowerCase();
   
   // Enhanced topic detection with Arabic and English keywords
   const topicCategories = {
@@ -336,9 +361,16 @@ function performSemanticAnalysis(content: string, language: string) {
   // Calculate weighted scores for each category
   Object.entries(topicCategories).forEach(([category, data]) => {
     data.keywords.forEach(keyword => {
-      const regex = new RegExp(`\\b${keyword}\\b`, 'gi');
-      const matches = (text.match(regex) || []).length;
-      data.weight += matches * (keyword.length > 10 ? 2 : 1);
+      // Use simple string includes instead of complex regex to prevent stack overflow
+      const keywordLower = keyword.toLowerCase();
+      const textLower = text.toLowerCase();
+      let count = 0;
+      let index = textLower.indexOf(keywordLower);
+      while (index !== -1) {
+        count++;
+        index = textLower.indexOf(keywordLower, index + 1);
+      }
+      data.weight += count * (keyword.length > 10 ? 2 : 1);
     });
   });
   
@@ -350,13 +382,18 @@ function performSemanticAnalysis(content: string, language: string) {
   return {
     dominantTopics: sortedTopics.slice(0, 3).map(([topic]) => topic),
     topicScores: Object.fromEntries(sortedTopics),
-    sentiment: analyzeSentiment(content, language),
-    intent: detectIntent(content, language),
-    keyPhrases: extractKeyPhrases(content, language)
+    sentiment: analyzeSentiment(truncatedContent, language),
+    intent: detectIntent(truncatedContent, language),
+    keyPhrases: extractKeyPhrases(truncatedContent, language)
   };
 }
 
 function extractContextualInformation(content: string, type: string) {
+  // Truncate content to prevent regex stack overflow
+  const truncatedContent = content.length > MAX_CONTENT_LENGTH 
+    ? content.substring(0, MAX_CONTENT_LENGTH) 
+    : content;
+  
   const context = {
     contentType: type,
     urgency: 'normal',
@@ -366,9 +403,9 @@ function extractContextualInformation(content: string, type: string) {
     professional: false
   };
   
-  const text = content.toLowerCase();
+  const text = truncatedContent.toLowerCase();
   
-  // Detect urgency (Arabic and English)
+  // Detect urgency (Arabic and English) - use simple includes instead of complex regex
   const urgentWords = ['urgent', 'asap', 'immediately', 'deadline', 'emergency', 'critical', 'important', 'عاجل', 'فوري', 'مهم', 'طارئ', 'موعد نهائي'];
   if (urgentWords.some(word => text.includes(word))) {
     context.urgency = 'high';
@@ -699,60 +736,61 @@ function generateIntelligentTags(content: string, structure: any, semantic: any,
 }
 
 function extractKeyPhrases(content: string, language: string): string[] {
-  const text = content.toLowerCase();
+  // Truncate content to prevent regex stack overflow
+  const truncatedContent = content.length > MAX_CONTENT_LENGTH 
+    ? content.substring(0, MAX_CONTENT_LENGTH) 
+    : content;
+  
+  const text = truncatedContent.toLowerCase();
   const phrases: string[] = [];
   
   if (language === 'ar') {
-    // Arabic phrase extraction - simplified
-    const arabicPhrasePattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\s]{5,50}/g;
-    const matches = content.match(arabicPhrasePattern) || [];
+    // Arabic phrase extraction - simplified to avoid complex regex
+    const words = truncatedContent.split(/\s+/);
+    const arabicWords = words.filter(word => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(word));
     
-    const scoredPhrases = matches
-      .filter(phrase => phrase.trim().length > 5 && phrase.trim().length < 50)
-      .map(phrase => {
-        let score = 0;
-        const words = phrase.trim().split(/\s+/);
-        
-        // Prefer 2-5 word phrases for Arabic
-        if (words.length >= 2 && words.length <= 5) score += 2;
-        
-        return { phrase: phrase.trim(), score };
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5)
-      .map(item => item.phrase);
+    // Create simple 2-5 word phrases
+    for (let i = 0; i < arabicWords.length - 1; i++) {
+      for (let len = 2; len <= Math.min(5, arabicWords.length - i); len++) {
+        const phrase = arabicWords.slice(i, i + len).join(' ').trim();
+        if (phrase.length > 5 && phrase.length < 50) {
+          phrases.push(phrase);
+        }
+      }
+    }
     
-    return scoredPhrases;
+    return phrases.slice(0, 5);
   } else {
-    // English phrase extraction
-    const nounPhrasePattern = /\b(?:the\s+)?(?:[\w]+\s+){0,2}[\w]+(?:\s+(?:of|for|in|on|with|by)\s+[\w]+)?\b/g;
-    const matches = text.match(nounPhrasePattern) || [];
+    // English phrase extraction - simplified
+    const words = text.split(/\s+/).filter(word => word.length > 2);
     
-    const scoredPhrases = matches
-      .filter(phrase => phrase.length > 5 && phrase.length < 50)
-      .map(phrase => {
-        let score = 0;
-        const words = phrase.split(/\s+/);
-        
-        // Prefer 2-4 word phrases
-        if (words.length >= 2 && words.length <= 4) score += 2;
-        
-        return { phrase: phrase.trim(), score };
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5)
-      .map(item => item.phrase);
+    // Create simple 2-4 word phrases
+    for (let i = 0; i < words.length - 1; i++) {
+      for (let len = 2; len <= Math.min(4, words.length - i); len++) {
+        const phrase = words.slice(i, i + len).join(' ').trim();
+        if (phrase.length > 5 && phrase.length < 50) {
+          phrases.push(phrase);
+        }
+      }
+    }
     
-    return scoredPhrases;
+    return phrases.slice(0, 5);
   }
 }
 
 function extractImportantWords(content: string, language: string): string[] {
-  const text = content.toLowerCase();
+  // Truncate content to prevent regex stack overflow
+  const truncatedContent = content.length > MAX_CONTENT_LENGTH 
+    ? content.substring(0, MAX_CONTENT_LENGTH) 
+    : content;
+  
+  const text = truncatedContent.toLowerCase();
   
   if (language === 'ar') {
-    // Arabic word extraction
-    const words = content.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]{3,}/g) || [];
+    // Arabic word extraction - use simple split instead of complex regex
+    const words = truncatedContent.split(/\s+/).filter(word => 
+      /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(word) && word.length >= 3
+    );
     
     // Arabic common words to exclude
     const commonWords = new Set([
@@ -764,8 +802,9 @@ function extractImportantWords(content: string, language: string): string[] {
     // Count word frequency
     const wordCount: Record<string, number> = {};
     words.forEach(word => {
-      if (!commonWords.has(word) && word.length >= 3) {
-        wordCount[word] = (wordCount[word] || 0) + 1;
+      const cleanWord = word.replace(/[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g, '');
+      if (!commonWords.has(cleanWord) && cleanWord.length >= 3) {
+        wordCount[cleanWord] = (wordCount[cleanWord] || 0) + 1;
       }
     });
     
@@ -774,8 +813,8 @@ function extractImportantWords(content: string, language: string): string[] {
       .slice(0, 8)
       .map(([word]) => word);
   } else {
-    // English word extraction
-    const words = text.match(/\b\w{4,}\b/g) || [];
+    // English word extraction - use simple split instead of complex regex
+    const words = text.split(/\s+/).filter(word => word.length >= 4 && /^[a-zA-Z]+$/.test(word));
     
     // Common words to exclude
     const commonWords = new Set([
@@ -803,48 +842,53 @@ function extractImportantWords(content: string, language: string): string[] {
 }
 
 function detectIntent(content: string, language: string): string {
-  const text = content.toLowerCase();
+  // Truncate content to prevent regex stack overflow
+  const truncatedContent = content.length > MAX_CONTENT_LENGTH 
+    ? content.substring(0, MAX_CONTENT_LENGTH) 
+    : content;
+  
+  const text = truncatedContent.toLowerCase();
   
   if (language === 'ar') {
-    if (/\b(مهمة|عمل|يجب|لا تنس|تذكر|مطلوب)\b/.test(text)) {
+    if (text.includes('مهمة') || text.includes('عمل') || text.includes('يجب') || text.includes('لا تنس') || text.includes('تذكر') || text.includes('مطلوب')) {
       return 'task';
     }
     
-    if (/\b(فكرة|مفهوم|فكر|عصف ذهني|ابتكار)\b/.test(text)) {
+    if (text.includes('فكرة') || text.includes('مفهوم') || text.includes('فكر') || text.includes('عصف ذهني') || text.includes('ابتكار')) {
       return 'idea';
     }
     
-    if (/\b(ملاحظة|تذكير|مذكرة|سجل|تسجيل)\b/.test(text)) {
+    if (text.includes('ملاحظة') || text.includes('تذكير') || text.includes('مذكرة') || text.includes('سجل') || text.includes('تسجيل')) {
       return 'note';
     }
     
-    if (/\b(تعلم|دراسة|بحث|فهم|استكشاف)\b/.test(text)) {
+    if (text.includes('تعلم') || text.includes('دراسة') || text.includes('بحث') || text.includes('فهم') || text.includes('استكشاف')) {
       return 'learning';
     }
     
-    if (/\b(خطة|استراتيجية|هدف|غاية|مقصد)\b/.test(text)) {
+    if (text.includes('خطة') || text.includes('استراتيجية') || text.includes('هدف') || text.includes('غاية') || text.includes('مقصد')) {
       return 'planning';
     }
     
     return 'information';
   } else {
-    if (/\b(todo|task|need to|should|must|remember to|don't forget)\b/.test(text)) {
+    if (text.includes('todo') || text.includes('task') || text.includes('need to') || text.includes('should') || text.includes('must') || text.includes('remember to') || text.includes('don\'t forget')) {
       return 'task';
     }
     
-    if (/\b(idea|concept|thought|brainstorm|innovation)\b/.test(text)) {
+    if (text.includes('idea') || text.includes('concept') || text.includes('thought') || text.includes('brainstorm') || text.includes('innovation')) {
       return 'idea';
     }
     
-    if (/\b(note|reminder|memo|record|log)\b/.test(text)) {
+    if (text.includes('note') || text.includes('reminder') || text.includes('memo') || text.includes('record') || text.includes('log')) {
       return 'note';
     }
     
-    if (/\b(learn|study|research|understand|explore)\b/.test(text)) {
+    if (text.includes('learn') || text.includes('study') || text.includes('research') || text.includes('understand') || text.includes('explore')) {
       return 'learning';
     }
     
-    if (/\b(plan|strategy|goal|objective|target)\b/.test(text)) {
+    if (text.includes('plan') || text.includes('strategy') || text.includes('goal') || text.includes('objective') || text.includes('target')) {
       return 'planning';
     }
     
@@ -853,7 +897,12 @@ function detectIntent(content: string, language: string): string {
 }
 
 function analyzeSentiment(content: string, language: string): 'positive' | 'negative' | 'neutral' {
-  const text = content.toLowerCase();
+  // Truncate content to prevent regex stack overflow
+  const truncatedContent = content.length > MAX_CONTENT_LENGTH 
+    ? content.substring(0, MAX_CONTENT_LENGTH) 
+    : content;
+  
+  const text = truncatedContent.toLowerCase();
   
   let positiveWords: string[];
   let negativeWords: string[];
