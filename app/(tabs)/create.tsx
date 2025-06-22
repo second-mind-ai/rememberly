@@ -8,6 +8,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  I18nManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -15,7 +16,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useNotesStore } from '@/lib/store';
 import { summarizeContent, fetchUrlContent } from '@/lib/ai';
-import { FileText, Link2, Image as ImageIcon, Camera, Upload, Brain, Sparkles, Check, X, Zap, Star } from 'lucide-react-native';
+import { FileText, Link2, Image as ImageIcon, Camera, Upload, Brain, Sparkles, Check, X, Zap, Star, Paperclip, Search, Mic } from 'lucide-react-native';
 
 type NoteType = 'text' | 'url' | 'file' | 'image';
 
@@ -190,13 +191,6 @@ export default function CreateScreen() {
     }
   }
 
-  const tabs = [
-    { id: 'text', label: 'Text', icon: FileText },
-    { id: 'url', label: 'URL', icon: Link2 },
-    { id: 'file', label: 'File', icon: Upload },
-    { id: 'image', label: 'Image', icon: ImageIcon },
-  ];
-
   const canAnalyze = content.trim() && !analyzing && !loading;
   const canCreate = content.trim() && aiPreview && !analyzing && !loading;
 
@@ -214,88 +208,116 @@ export default function CreateScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.tabs}>
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <TouchableOpacity
-                key={tab.id}
-                style={[styles.tab, isActive && styles.activeTab]}
-                onPress={() => setActiveTab(tab.id as NoteType)}
-              >
-                <Icon 
-                  size={20} 
-                  color={isActive ? '#2563EB' : '#6B7280'} 
-                  strokeWidth={2}
-                />
-                <Text style={[styles.tabText, isActive && styles.activeTabText]}>
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
+        {/* ChatGPT-style Input Section */}
         <View style={styles.inputSection}>
-          {activeTab === 'text' && (
-            <View>
-              <Text style={styles.inputLabel}>Enter your text</Text>
-              <TextInput
-                style={styles.textInput}
-                value={content}
-                onChangeText={setContent}
-                placeholder="Type or paste your content here..."
-                placeholderTextColor="#9CA3AF"
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          )}
-
-          {activeTab === 'url' && (
-            <View>
-              <Text style={styles.inputLabel}>Enter URL</Text>
-              <TextInput
-                style={styles.urlInput}
-                value={content}
-                onChangeText={setContent}
-                placeholder="https://example.com/article"
-                keyboardType="url"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
-          )}
-
-          {activeTab === 'file' && (
-            <View style={styles.fileSection}>
-              <Text style={styles.inputLabel}>Upload Document</Text>
-              <TouchableOpacity style={styles.uploadButton} onPress={handleDocumentPicker}>
-                <Upload size={24} color="#2563EB" strokeWidth={2} />
-                <Text style={styles.uploadText}>Choose File</Text>
+          <View style={styles.chatInputContainer}>
+            <TextInput
+              style={[
+                styles.chatInput,
+                I18nManager.isRTL && styles.rtlText
+              ]}
+              value={content}
+              onChangeText={setContent}
+              placeholder="Ask anything"
+              placeholderTextColor="#9CA3AF"
+              multiline
+              textAlignVertical="top"
+              maxLength={5000}
+            />
+            
+            <View style={styles.inputActions}>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={handleDocumentPicker}
+                activeOpacity={0.7}
+              >
+                <Paperclip size={20} color="#6B7280" strokeWidth={2} />
               </TouchableOpacity>
-              {content && (
-                <Text style={styles.selectedFile}>Selected: {content.split('/').pop() || 'No file selected'}</Text>
-              )}
+              
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => {/* Search functionality */}}
+                activeOpacity={0.7}
+              >
+                <Search size={20} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => {/* Voice functionality */}}
+                activeOpacity={0.7}
+              >
+                <Mic size={20} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
             </View>
-          )}
+          </View>
 
-          {activeTab === 'image' && (
-            <View style={styles.imageSection}>
-              <Text style={styles.inputLabel}>Add Image</Text>
-              <View style={styles.imageButtons}>
-                <TouchableOpacity style={styles.imageButton} onPress={handleCameraPicker}>
-                  <Camera size={24} color="#2563EB" strokeWidth={2} />
-                  <Text style={styles.imageButtonText}>Take Photo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.imageButton} onPress={handleImagePicker}>
-                  <ImageIcon size={24} color="#2563EB" strokeWidth={2} />
-                  <Text style={styles.imageButtonText}>Choose Photo</Text>
-                </TouchableOpacity>
-              </View>
-              {content && (
-                <Text style={styles.selectedFile}>Selected: {content.split('/').pop() || 'No file selected'}</Text>
+          {/* Quick Action Buttons */}
+          <View style={styles.quickActions}>
+            <TouchableOpacity
+              style={[styles.quickActionButton, activeTab === 'text' && styles.quickActionActive]}
+              onPress={() => setActiveTab('text')}
+            >
+              <FileText size={18} color={activeTab === 'text' ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+              <Text style={[styles.quickActionText, activeTab === 'text' && styles.quickActionTextActive]}>
+                Text
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.quickActionButton, activeTab === 'url' && styles.quickActionActive]}
+              onPress={() => setActiveTab('url')}
+            >
+              <Link2 size={18} color={activeTab === 'url' ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+              <Text style={[styles.quickActionText, activeTab === 'url' && styles.quickActionTextActive]}>
+                URL
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.quickActionButton, activeTab === 'file' && styles.quickActionActive]}
+              onPress={() => {
+                setActiveTab('file');
+                handleDocumentPicker();
+              }}
+            >
+              <Upload size={18} color={activeTab === 'file' ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+              <Text style={[styles.quickActionText, activeTab === 'file' && styles.quickActionTextActive]}>
+                File
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.quickActionButton, activeTab === 'image' && styles.quickActionActive]}
+              onPress={() => {
+                setActiveTab('image');
+                handleImagePicker();
+              }}
+            >
+              <ImageIcon size={18} color={activeTab === 'image' ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+              <Text style={[styles.quickActionText, activeTab === 'image' && styles.quickActionTextActive]}>
+                Image
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* File/Image Display */}
+          {(activeTab === 'file' || activeTab === 'image') && content && (
+            <View style={styles.fileDisplay}>
+              <Text style={styles.selectedFile}>
+                Selected: {content.split('/').pop() || 'No file selected'}
+              </Text>
+              {activeTab === 'image' && (
+                <View style={styles.imageActions}>
+                  <TouchableOpacity style={styles.imageActionButton} onPress={handleCameraPicker}>
+                    <Camera size={16} color="#2563EB" strokeWidth={2} />
+                    <Text style={styles.imageActionText}>Take Photo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.imageActionButton} onPress={handleImagePicker}>
+                    <ImageIcon size={16} color="#2563EB" strokeWidth={2} />
+                    <Text style={styles.imageActionText}>Choose Photo</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           )}
@@ -354,7 +376,10 @@ export default function CreateScreen() {
               <View style={styles.previewField}>
                 <Text style={styles.previewFieldLabel}>Generated Title</Text>
                 <TextInput
-                  style={styles.previewInput}
+                  style={[
+                    styles.previewInput,
+                    I18nManager.isRTL && styles.rtlText
+                  ]}
                   value={customTitle}
                   onChangeText={setCustomTitle}
                   placeholder="Edit title..."
@@ -365,7 +390,11 @@ export default function CreateScreen() {
               <View style={styles.previewField}>
                 <Text style={styles.previewFieldLabel}>Generated Summary</Text>
                 <TextInput
-                  style={[styles.previewInput, styles.previewTextArea]}
+                  style={[
+                    styles.previewInput, 
+                    styles.previewTextArea,
+                    I18nManager.isRTL && styles.rtlText
+                  ]}
                   value={customSummary}
                   onChangeText={setCustomSummary}
                   placeholder="Edit summary..."
@@ -382,7 +411,9 @@ export default function CreateScreen() {
                   <View style={styles.tagsContainer}>
                     {aiPreview.tags.map((tag, index) => (
                       <View key={index} style={styles.tag}>
-                        <Text style={styles.tagText}>{tag}</Text>
+                        <Text style={[styles.tagText, I18nManager.isRTL && styles.rtlText]}>
+                          {tag}
+                        </Text>
                       </View>
                     ))}
                   </View>
@@ -472,110 +503,110 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
-  tabs: {
-    flexDirection: 'row',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 4,
+  inputSection: {
     marginBottom: 24,
   },
-  tab: {
+  chatInputContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  chatInput: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    minHeight: 60,
+    maxHeight: 200,
+    textAlignVertical: 'top',
+    marginBottom: 12,
+  },
+  rtlText: {
+    textAlign: I18nManager.isRTL ? 'right' : 'left',
+    writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
+  },
+  inputActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: 12,
+  },
+  actionButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  quickActionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 12,
-    borderRadius: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  activeTab: {
-    backgroundColor: '#EFF6FF',
+  quickActionActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
   },
-  tabText: {
+  quickActionText: {
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#6B7280',
   },
-  activeTabText: {
-    color: '#2563EB',
+  quickActionTextActive: {
+    color: '#ffffff',
   },
-  inputSection: {
-    marginBottom: 24,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  textInput: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
+  fileDisplay: {
+    backgroundColor: '#F8FAFC',
     padding: 16,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    minHeight: 200,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-  },
-  urlInput: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  fileSection: {
-    gap: 16,
-  },
-  uploadButton: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    gap: 8,
-  },
-  uploadText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#2563EB',
-  },
-  imageSection: {
-    gap: 16,
-  },
-  imageButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  imageButton: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-    gap: 8,
-  },
-  imageButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#2563EB',
   },
   selectedFile: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#059669',
-    backgroundColor: '#F0FDF4',
-    padding: 12,
+    marginBottom: 12,
+  },
+  imageActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  imageActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  imageActionText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#2563EB',
   },
   analyzeButton: {
     backgroundColor: '#7C3AED',

@@ -58,8 +58,7 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
   tags: string[];
 }> {
   try {
-    const detectedLanguage = detectLanguage(content);
-    const prompt = createMultilingualAnalysisPrompt(content, type, detectedLanguage);
+    const prompt = createAnalysisPrompt(content, type);
     
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
@@ -68,22 +67,19 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Use gpt-4o-mini instead of gpt-4 for better availability
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: `You are an expert multilingual content analyzer. You MUST respond with ONLY a valid JSON object in this exact format:
-{"title": "string", "summary": "string", "tags": ["string1", "string2"]}
-
-Do not include any markdown formatting, explanations, or additional text. Only return the JSON object.`
+            content: 'You are an expert multilingual content analyzer that creates perfect titles, summaries, and tags for notes in any language. You excel at understanding context in Arabic, English, and other languages, extracting key information, and creating human-readable content that helps users organize and remember their information effectively. Always respond in the same language as the input content.'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        max_tokens: 500,
-        temperature: 0.1, // Lower temperature for more consistent output
+        max_tokens: 800,
+        temperature: 0.1,
       }),
     });
 
@@ -107,63 +103,29 @@ Do not include any markdown formatting, explanations, or additional text. Only r
   }
 }
 
-function createMultilingualAnalysisPrompt(content: string, type: string, language: string): string {
-  const contentPreview = content.length > 2000 ? content.substring(0, 2000) + '...' : content;
+function createAnalysisPrompt(content: string, type: string): string {
+  const contentPreview = content.length > 3000 ? content.substring(0, 3000) + '...' : content;
+  const detectedLanguage = detectLanguage(content);
   
-  const languageInstructions = {
-    'ar': 'يجب أن تكون جميع النتائج باللغة العربية',
-    'zh': '所有结果必须使用中文',
-    'es': 'Todos los resultados deben estar en español',
-    'fr': 'Tous les résultats doivent être en français',
-    'de': 'Alle Ergebnisse müssen auf Deutsch sein',
-    'it': 'Tutti i risultati devono essere in italiano',
-    'pt': 'Todos os resultados devem estar em português',
-    'ru': 'Все результаты должны быть на русском языке',
-    'ja': 'すべての結果は日本語である必要があります',
-    'ko': '모든 결과는 한국어로 작성되어야 합니다',
-    'hi': 'सभी परिणाम हिंदी में होने चाहिए',
-    'tr': 'Tüm sonuçlar Türkçe olmalıdır',
-    'nl': 'Alle resultaten moeten in het Nederlands zijn',
-    'sv': 'Alla resultat måste vara på svenska',
-    'da': 'Alle resultater skal være på dansk',
-    'no': 'Alle resultater må være på norsk',
-    'fi': 'Kaikkien tulosten on oltava suomeksi',
-    'pl': 'Wszystkie wyniki muszą być w języku polskim',
-    'cs': 'Všechny výsledky musí být v češtině',
-    'hu': 'Minden eredménynek magyar nyelven kell lennie',
-    'ro': 'Toate rezultatele trebuie să fie în română',
-    'bg': 'Всички резултати трябва да бъдат на български',
-    'hr': 'Svi rezultati moraju biti na hrvatskom',
-    'sk': 'Všetky výsledky musia byť v slovenčine',
-    'sl': 'Vsi rezultati morajo biti v slovenščini',
-    'et': 'Kõik tulemused peavad olema eesti keeles',
-    'lv': 'Visiem rezultātiem jābūt latviešu valodā',
-    'lt': 'Visi rezultatai turi būti lietuvių kalba',
-    'mt': 'Ir-riżultati kollha għandhom ikunu bil-Malti',
-    'ga': 'Caithfidh na torthaí go léir a bheith as Gaeilge',
-    'cy': 'Rhaid i\'r holl ganlyniadau fod yn Gymraeg',
-    'eu': 'Emaitza guztiak euskeraz egon behar dira',
-    'ca': 'Tots els resultats han de ser en català',
-    'gl': 'Todos os resultados deben estar en galego',
-    'en': 'All results must be in English'
-  };
+  return `Analyze this ${type} content and provide a JSON response with exactly this structure. IMPORTANT: Respond in the same language as the input content (detected: ${detectedLanguage}).
 
-  const instruction = languageInstructions[language] || languageInstructions['en'];
-
-  return `Analyze this ${type} content and respond with ONLY a JSON object in this exact format:
-
-{"title": "A smart, engaging title (max 8 words)", "summary": "A clear, concise summary (2-4 sentences)", "tags": ["array", "of", "relevant", "tags"]}
-
-CRITICAL REQUIREMENTS:
-- ${instruction}
-- Return ONLY the JSON object, no markdown, no explanations, no additional text
-- Title: max 8 words, descriptive and engaging
-- Summary: 2-4 sentences, conversational and insightful
-- Tags: max 10 relevant keywords/topics
-- Ensure valid JSON syntax
+{
+  "title": "A smart, engaging title in the same language as the content (max 8 words)",
+  "summary": "A clear, concise summary in the same language (2-4 sentences) that captures the main points",
+  "tags": ["array", "of", "relevant", "tags", "in", "the", "same", "language", "max", "10", "tags"]
+}
 
 Content to analyze:
-${contentPreview}`;
+${contentPreview}
+
+Requirements:
+- Title should be descriptive, engaging, and human-readable in the original language
+- Summary should be conversational and highlight key insights in the original language
+- Tags should include topics, categories, and relevant keywords in the original language
+- For Arabic content, use proper Arabic text and maintain RTL reading flow
+- For English content, use English
+- Focus on making this useful for someone organizing their notes
+- Ensure the response is valid JSON only with no additional text or formatting`;
 }
 
 function parseAIResponse(response: string): {
@@ -178,68 +140,68 @@ function parseAIResponse(response: string): {
     // Remove markdown code blocks if present
     cleanResponse = cleanResponse.replace(/```json\s*/g, '').replace(/```\s*/g, '');
     
-    // Remove any leading/trailing text that's not part of JSON
+    // Remove any text before the first { and after the last }
     const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
     
     if (!jsonMatch) {
-      console.error('No JSON object found in response:', response);
+      console.error('No JSON found in response:', response);
       throw new Error('No JSON found in response');
     }
     
-    const jsonString = jsonMatch[0];
+    let jsonString = jsonMatch[0];
     
-    // Attempt to parse the JSON
-    let parsed;
+    // Try to fix common JSON issues
     try {
-      parsed = JSON.parse(jsonString);
+      // Remove trailing commas
+      jsonString = jsonString.replace(/,(\s*[}\]])/g, '$1');
+      
+      // Fix unquoted keys (basic fix)
+      jsonString = jsonString.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
+      
+      const parsed = JSON.parse(jsonString);
+      
+      // Validate and clean the response
+      return {
+        title: (parsed.title || 'Untitled Note').toString().substring(0, 150),
+        summary: (parsed.summary || 'No summary available').toString().substring(0, 800),
+        tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 10).map(tag => tag.toString()) : ['note']
+      };
     } catch (parseError) {
-      console.error('JSON parse error:', parseError);
-      console.error('Attempted to parse:', jsonString);
+      console.error('JSON parsing failed, attempting repair:', parseError);
       
-      // Try to fix common JSON issues
-      let fixedJson = jsonString
-        .replace(/,\s*}/g, '}') // Remove trailing commas
-        .replace(/,\s*]/g, ']') // Remove trailing commas in arrays
-        .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // Add quotes to unquoted keys
-        .replace(/:\s*'([^']*)'/g, ': "$1"') // Replace single quotes with double quotes
-        .replace(/\n/g, ' ') // Remove newlines
-        .replace(/\t/g, ' ') // Remove tabs
-        .replace(/\s+/g, ' '); // Normalize whitespace
+      // Last resort: try to extract values manually
+      const titleMatch = jsonString.match(/"title"\s*:\s*"([^"]+)"/);
+      const summaryMatch = jsonString.match(/"summary"\s*:\s*"([^"]+)"/);
+      const tagsMatch = jsonString.match(/"tags"\s*:\s*\[(.*?)\]/);
       
-      try {
-        parsed = JSON.parse(fixedJson);
-        console.log('Successfully parsed after fixing JSON');
-      } catch (secondParseError) {
-        console.error('Failed to parse even after fixing:', secondParseError);
-        throw new Error('Invalid AI response format');
+      let tags = ['note'];
+      if (tagsMatch) {
+        try {
+          const tagsString = '[' + tagsMatch[1] + ']';
+          const parsedTags = JSON.parse(tagsString);
+          if (Array.isArray(parsedTags)) {
+            tags = parsedTags.slice(0, 10).map(tag => tag.toString());
+          }
+        } catch (tagsError) {
+          console.error('Failed to parse tags:', tagsError);
+        }
       }
+      
+      return {
+        title: titleMatch ? titleMatch[1].substring(0, 150) : 'Untitled Note',
+        summary: summaryMatch ? summaryMatch[1].substring(0, 800) : 'No summary available',
+        tags
+      };
     }
-    
-    // Validate and clean the response structure
-    if (!parsed || typeof parsed !== 'object') {
-      throw new Error('Response is not a valid object');
-    }
-    
-    // Ensure required fields exist and are valid
-    const title = typeof parsed.title === 'string' ? parsed.title.trim() : 'Untitled Note';
-    const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : 'No summary available';
-    const tags = Array.isArray(parsed.tags) ? parsed.tags.filter(tag => typeof tag === 'string' && tag.trim().length > 0) : ['note'];
-    
-    // Validate lengths and clean up
-    return {
-      title: title.length > 0 ? title.substring(0, 100) : 'Untitled Note',
-      summary: summary.length > 0 ? summary.substring(0, 500) : 'No summary available',
-      tags: tags.length > 0 ? tags.slice(0, 10) : ['note']
-    };
   } catch (error) {
     console.error('Error parsing AI response:', error);
     console.error('Original response:', response);
     
-    // Return a fallback response instead of throwing
+    // Return a meaningful fallback instead of throwing
     return {
-      title: 'AI Analysis Note',
-      summary: 'Content analyzed but response formatting failed. Please try again.',
-      tags: ['note', 'content', 'analysis']
+      title: 'Untitled Note',
+      summary: 'Failed to analyze content. Please try again.',
+      tags: ['note', 'error']
     };
   }
 }
@@ -252,96 +214,50 @@ async function performEnhancedLocalAnalysis(content: string, type: string): Prom
   // Simulate processing time for better UX
   await new Promise(resolve => setTimeout(resolve, 1500));
   
-  const detectedLanguage = detectLanguage(content);
+  const language = detectLanguage(content);
   const analysis = analyzeContentStructure(content);
-  const semantic = performSemanticAnalysis(content, detectedLanguage);
+  const semantic = performSemanticAnalysis(content, language);
   const contextual = extractContextualInformation(content, type);
   
   return {
-    title: generateIntelligentTitle(content, analysis, semantic, detectedLanguage),
-    summary: generateIntelligentSummary(content, analysis, semantic, detectedLanguage),
-    tags: generateIntelligentTags(content, analysis, semantic, contextual, detectedLanguage)
+    title: generateIntelligentTitle(content, analysis, semantic, language),
+    summary: generateIntelligentSummary(content, analysis, semantic, language),
+    tags: generateIntelligentTags(content, analysis, semantic, contextual, language)
   };
 }
 
-function detectLanguage(content: string): string {
+function detectLanguage(content: string): 'ar' | 'en' | 'unknown' {
   const text = content.toLowerCase();
   
-  // Language detection patterns
-  const languagePatterns = {
-    'ar': /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/,
-    'zh': /[\u4e00-\u9fff\u3400-\u4dbf\u20000-\u2a6df\u2a700-\u2b73f\u2b740-\u2b81f\u2b820-\u2ceaf]/,
-    'ja': /[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf]/,
-    'ko': /[\uac00-\ud7af\u1100-\u11ff\u3130-\u318f\ua960-\ua97f\ud7b0-\ud7ff]/,
-    'hi': /[\u0900-\u097F]/,
-    'th': /[\u0E00-\u0E7F]/,
-    'ru': /[\u0400-\u04FF]/,
-    'gr': /[\u0370-\u03FF]/,
-    'he': /[\u0590-\u05FF]/
-  };
-
-  // Check for non-Latin scripts first
-  for (const [lang, pattern] of Object.entries(languagePatterns)) {
-    if (pattern.test(text)) {
-      return lang;
-    }
-  }
-
-  // Common words for Latin-script languages
-  const commonWords = {
-    'es': ['el', 'la', 'de', 'que', 'y', 'en', 'un', 'es', 'se', 'no', 'te', 'lo', 'le', 'da', 'su', 'por', 'son', 'con', 'para', 'una', 'está', 'como', 'muy', 'pero', 'sus', 'todo', 'esta', 'fue', 'ser', 'han', 'donde', 'está', 'durante', 'siempre', 'todos', 'manera', 'bien', 'poder', 'estado', 'así', 'entre'],
-    'fr': ['le', 'de', 'et', 'à', 'un', 'il', 'être', 'et', 'en', 'avoir', 'que', 'pour', 'dans', 'ce', 'son', 'une', 'sur', 'avec', 'ne', 'se', 'pas', 'tout', 'plus', 'par', 'grand', 'en', 'une', 'être', 'et', 'en', 'avoir', 'que', 'pour'],
-    'de': ['der', 'die', 'und', 'in', 'den', 'von', 'zu', 'das', 'mit', 'sich', 'des', 'auf', 'für', 'ist', 'im', 'dem', 'nicht', 'ein', 'eine', 'als', 'auch', 'es', 'an', 'werden', 'aus', 'er', 'hat', 'dass', 'sie', 'nach', 'wird', 'bei', 'einer', 'um', 'am', 'sind', 'noch', 'wie', 'einem', 'über', 'einen', 'so', 'zum', 'war', 'haben', 'nur', 'oder', 'aber', 'vor', 'zur', 'bis', 'mehr', 'durch', 'man', 'sein', 'wurde', 'sei', 'in'],
-    'it': ['il', 'di', 'che', 'e', 'la', 'per', 'un', 'in', 'con', 'del', 'da', 'a', 'al', 'le', 'si', 'dei', 'come', 'io', 'questo', 'qui', 'tutto', 'ancora', 'suoi', 'dopo', 'senza', 'anche', 'te', 'della', 'un', 'aveva', 'verso', 'tempo', 'molto', 'me', 'allora', 'solo', 'sua', 'prima', 'erano', 'cosa', 'tanto', 'durante', 'sempre', 'tutti', 'modo', 'lei', 'casa', 'quella', 'contro', 'invece', 'così', 'grande'],
-    'pt': ['o', 'de', 'a', 'e', 'do', 'da', 'em', 'um', 'para', 'é', 'com', 'não', 'uma', 'os', 'no', 'se', 'na', 'por', 'mais', 'as', 'dos', 'como', 'mas', 'foi', 'ao', 'ele', 'das', 'tem', 'à', 'seu', 'sua', 'ou', 'ser', 'quando', 'muito', 'há', 'nos', 'já', 'está', 'eu', 'também', 'só', 'pelo', 'pela', 'até', 'isso', 'ela', 'entre', 'era', 'depois', 'sem', 'mesmo', 'aos', 'ter', 'seus', 'suas', 'numa', 'pelos', 'pelas', 'esse', 'eles', 'estão', 'você', 'tinha', 'foram', 'essa', 'num', 'nem', 'suas', 'meu', 'às', 'minha', 'têm', 'numa', 'pelos', 'pelas', 'numa'],
-    'nl': ['de', 'van', 'het', 'een', 'en', 'in', 'te', 'dat', 'op', 'voor', 'met', 'als', 'zijn', 'er', 'maar', 'om', 'door', 'over', 'ze', 'uit', 'aan', 'bij', 'nog', 'kan', 'zoals', 'meer', 'werd', 'jaar', 'twee', 'tussen', 'na', 'zonder', 'veel', 'onder', 'tegen', 'tot', 'hier', 'ook', 'toen', 'moet', 'wel', 'waar', 'mijn', 'hen', 'dit', 'zou', 'zijn', 'deze', 'hebben', 'had'],
-    'sv': ['och', 'i', 'att', 'det', 'som', 'på', 'de', 'av', 'för', 'är', 'den', 'till', 'en', 'med', 'var', 'sig', 'om', 'har', 'inte', 'hans', 'från', 'men', 'ett', 'vid', 'så', 'kan', 'han', 'nu', 'ska', 'hon', 'här', 'än', 'vad', 'upp', 'ut', 'när', 'efter', 'bara', 'hur', 'sedan', 'över', 'också', 'dem', 'vara', 'mycket', 'genom', 'kommer', 'år', 'dessa', 'andra', 'mellan', 'under', 'skulle', 'där'],
-    'da': ['og', 'i', 'at', 'det', 'som', 'på', 'de', 'af', 'for', 'er', 'den', 'til', 'en', 'med', 'var', 'sig', 'om', 'har', 'ikke', 'hans', 'fra', 'men', 'et', 'ved', 'så', 'kan', 'han', 'nu', 'skal', 'hun', 'her', 'end', 'hvad', 'op', 'ud', 'når', 'efter', 'bare', 'hvordan', 'siden', 'over', 'også', 'dem', 'være', 'meget', 'gennem', 'kommer', 'år', 'disse', 'andre', 'mellem', 'under', 'skulle', 'hvor'],
-    'no': ['og', 'i', 'å', 'det', 'som', 'på', 'de', 'av', 'for', 'er', 'den', 'til', 'en', 'med', 'var', 'seg', 'om', 'har', 'ikke', 'hans', 'fra', 'men', 'et', 'ved', 'så', 'kan', 'han', 'nå', 'skal', 'hun', 'her', 'enn', 'hva', 'opp', 'ut', 'når', 'etter', 'bare', 'hvordan', 'siden', 'over', 'også', 'dem', 'være', 'mye', 'gjennom', 'kommer', 'år', 'disse', 'andre', 'mellom', 'under', 'skulle', 'hvor'],
-    'fi': ['ja', 'on', 'se', 'että', 'ei', 'ole', 'en', 'hän', 'kun', 'niin', 'kuin', 'jos', 'vain', 'sen', 'tai', 'olen', 'minä', 'sinä', 'hänellä', 'meillä', 'teillä', 'heillä', 'tämä', 'tuo', 'nämä', 'nuo', 'kuka', 'mikä', 'missä', 'milloin', 'miten', 'miksi', 'kuinka', 'joka', 'jotka', 'jonka', 'joiden', 'joita', 'joilla', 'joilta', 'joille', 'joissa', 'joista', 'joihin', 'jossa', 'josta', 'johon', 'jolla', 'jolta', 'jolle'],
-    'pl': ['i', 'w', 'na', 'z', 'do', 'nie', 'że', 'się', 'o', 'a', 'to', 'jest', 'od', 'za', 'po', 'jak', 'ale', 'dla', 'te', 'już', 'czy', 'tylko', 'jego', 'jej', 'ich', 'nim', 'nią', 'nimi', 'go', 'ją', 'je', 'mu', 'mi', 'ci', 'nas', 'was', 'im', 'gdy', 'gdzie', 'kiedy', 'dlaczego', 'jak', 'co', 'kto', 'który', 'która', 'które', 'których', 'którym', 'którymi', 'którą', 'któremu', 'której'],
-    'cs': ['a', 'v', 'na', 'z', 'do', 'ne', 'že', 'se', 'o', 'to', 'je', 'od', 'za', 'po', 'jak', 'ale', 'pro', 'ty', 'už', 'nebo', 'jen', 'jeho', 'její', 'jejich', 'jím', 'jí', 'jimi', 'ho', 'ji', 'je', 'mu', 'mi', 'ti', 'nás', 'vás', 'jim', 'když', 'kde', 'kdy', 'proč', 'jak', 'co', 'kdo', 'který', 'která', 'které', 'kterých', 'kterým', 'kterými', 'kterou', 'kterému', 'které'],
-    'hu': ['a', 'az', 'és', 'van', 'egy', 'hogy', 'nem', 'de', 'el', 'fel', 'le', 'be', 'ki', 'meg', 'át', 'rá', 'vissza', 'ide', 'oda', 'itt', 'ott', 'akkor', 'most', 'már', 'még', 'csak', 'is', 'vagy', 'ha', 'amikor', 'ahol', 'ahogy', 'amit', 'aki', 'amely', 'amelyet', 'amelynek', 'amelyben', 'amelyből', 'amelyre', 'amelytől', 'amelyért', 'amelyhez', 'amelynél', 'amelyig', 'amelyként'],
-    'ro': ['și', 'în', 'de', 'la', 'cu', 'pe', 'pentru', 'că', 'se', 'nu', 'un', 'o', 'este', 'sunt', 'era', 'erau', 'fi', 'fost', 'fiind', 'va', 'vor', 'avea', 'are', 'au', 'avea', 'avut', 'având', 'face', 'fac', 'făcut', 'făcând', 'da', 'dar', 'sau', 'dacă', 'când', 'unde', 'cum', 'ce', 'cine', 'care', 'cărei', 'căror', 'căreia', 'cărora', 'căruia', 'cărui'],
-    'bg': ['и', 'в', 'на', 'от', 'за', 'с', 'до', 'по', 'не', 'се', 'да', 'е', 'са', 'бе', 'беше', 'бяха', 'ще', 'би', 'има', 'имат', 'имаше', 'имаха', 'няма', 'нямат', 'нямаше', 'нямаха', 'но', 'или', 'ако', 'когато', 'където', 'как', 'какво', 'кой', 'която', 'което', 'които', 'чийто', 'чиято', 'чието', 'чиито'],
-    'hr': ['i', 'u', 'na', 'za', 'se', 'je', 'da', 'su', 'od', 'do', 's', 'o', 'ne', 'to', 'kao', 'ali', 'ili', 'ako', 'kada', 'gdje', 'kako', 'što', 'tko', 'koji', 'koja', 'koje', 'kojih', 'kojima', 'kojim', 'koju', 'kome', 'čiji', 'čija', 'čije', 'čijih', 'čijim', 'čijima', 'čiju', 'čijem', 'čijeg'],
-    'sk': ['a', 'v', 'na', 'z', 'do', 'nie', 'že', 'sa', 'o', 'to', 'je', 'od', 'za', 'po', 'ako', 'ale', 'pre', 'už', 'alebo', 'len', 'jeho', 'jej', 'ich', 'ním', 'ňou', 'nimi', 'ho', 'ju', 'ich', 'mu', 'mi', 'ti', 'nás', 'vás', 'im', 'keď', 'kde', 'kedy', 'prečo', 'ako', 'čo', 'kto', 'ktorý', 'ktorá', 'ktoré', 'ktorých', 'ktorým', 'ktorými', 'ktorú', 'ktorému', 'ktorej'],
-    'sl': ['in', 'v', 'na', 'z', 'za', 'se', 'je', 'da', 'so', 'od', 'do', 's', 'o', 'ne', 'to', 'kot', 'ampak', 'ali', 'če', 'ko', 'kje', 'kako', 'kaj', 'kdo', 'kateri', 'katera', 'katero', 'katerih', 'katerim', 'katerimi', 'katero', 'kateremu', 'katere', 'čigav', 'čigava', 'čigavo', 'čigavih', 'čigavim', 'čigavimi', 'čigavo', 'čigavemu', 'čigave'],
-    'et': ['ja', 'on', 'ei', 'ta', 'see', 'oma', 'kui', 'või', 'aga', 'ka', 'siis', 'nii', 'veel', 'juba', 'ainult', 'tema', 'mina', 'sina', 'meie', 'teie', 'nemad', 'see', 'too', 'need', 'nood', 'kes', 'mis', 'kus', 'millal', 'kuidas', 'miks', 'kui', 'kes', 'mis', 'millised', 'milliste', 'millistele', 'millistest', 'millistesse', 'millistes', 'millistest', 'millisteni'],
-    'lv': ['un', 'ir', 'nav', 'tas', 'šis', 'savs', 'ja', 'vai', 'bet', 'arī', 'tad', 'tā', 'vēl', 'jau', 'tikai', 'viņš', 'es', 'tu', 'mēs', 'jūs', 'viņi', 'šis', 'tas', 'šie', 'tie', 'kas', 'ko', 'kur', 'kad', 'kā', 'kāpēc', 'cik', 'kurš', 'kura', 'kuru', 'kuru', 'kuriem', 'kurām', 'kuru', 'kuram', 'kuras'],
-    'lt': ['ir', 'yra', 'nėra', 'tas', 'šis', 'savo', 'jei', 'arba', 'bet', 'taip pat', 'tada', 'taip', 'dar', 'jau', 'tik', 'jis', 'aš', 'tu', 'mes', 'jūs', 'jie', 'šis', 'tas', 'šie', 'tie', 'kas', 'ką', 'kur', 'kada', 'kaip', 'kodėl', 'kiek', 'kuris', 'kuri', 'kurį', 'kuriuos', 'kuriems', 'kurioms', 'kurį', 'kuriam', 'kurios']
-  };
-
-  // Count matches for each language
-  const words = text.split(/\s+/).slice(0, 100); // Check first 100 words for performance
-  const scores = {};
-
-  for (const [lang, wordList] of Object.entries(commonWords)) {
-    scores[lang] = 0;
-    for (const word of words) {
-      if (wordList.includes(word.toLowerCase())) {
-        scores[lang]++;
-      }
-    }
-  }
-
-  // Find language with highest score
-  const detectedLang = Object.entries(scores).reduce((a, b) => scores[a[0]] > scores[b[0]] ? a : b)[0];
+  // Arabic detection - check for Arabic characters
+  const arabicPattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  const arabicMatches = (content.match(arabicPattern) || []).length;
   
-  // Return detected language if confidence is high enough, otherwise default to English
-  return scores[detectedLang] > 2 ? detectedLang : 'en';
+  // English detection
+  const englishWords = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were'];
+  const words = text.split(/\s+/);
+  const englishMatches = words.filter(word => englishWords.includes(word)).length;
+  
+  // Determine language based on character presence and word matches
+  if (arabicMatches > 0) {
+    return 'ar';
+  } else if (englishMatches > words.length * 0.05) {
+    return 'en';
+  }
+  
+  return 'unknown';
 }
 
 function analyzeContentStructure(content: string) {
-  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  const sentences = content.split(/[.!?؟]+/).filter(s => s.trim().length > 10);
   const paragraphs = content.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-  const words = content.toLowerCase().match(/\b\w+\b/g) || [];
+  const words = content.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\w]+/g) || [];
   
   // Identify key structural elements
-  const hasQuestions = /\?/.test(content);
+  const hasQuestions = /[?؟]/.test(content);
   const hasNumbers = /\d+/.test(content);
   const hasLists = /[-•*]\s/.test(content) || /\d+\.\s/.test(content);
-  const hasQuotes = /"[^"]*"/.test(content) || /'[^']*'/.test(content);
+  const hasQuotes = /"[^"]*"/.test(content) || /'[^']*'/.test(content) || /«[^»]*»/.test(content);
   
   // Calculate readability metrics
   const avgWordsPerSentence = sentences.length > 0 ? words.length / sentences.length : 0;
@@ -365,8 +281,57 @@ function analyzeContentStructure(content: string) {
 function performSemanticAnalysis(content: string, language: string) {
   const text = content.toLowerCase();
   
-  // Get language-specific topic categories
-  const topicCategories = getTopicCategoriesForLanguage(language);
+  // Enhanced topic detection with Arabic and English keywords
+  const topicCategories = {
+    technology: {
+      keywords: language === 'ar' 
+        ? ['تقنية', 'تكنولوجيا', 'ذكي', 'اصطناعي', 'برمجة', 'كود', 'تطبيق', 'موقع', 'إنترنت', 'بيانات', 'خوارزمية', 'تطوير', 'بلوك تشين', 'عملة رقمية', 'سحابة', 'قاعدة بيانات']
+        : ['ai', 'artificial intelligence', 'machine learning', 'software', 'programming', 'code', 'tech', 'computer', 'digital', 'app', 'website', 'internet', 'data', 'algorithm', 'development', 'blockchain', 'cryptocurrency', 'cloud', 'api', 'database'],
+      weight: 0
+    },
+    business: {
+      keywords: language === 'ar'
+        ? ['أعمال', 'شركة', 'سوق', 'مبيعات', 'إيرادات', 'ربح', 'استثمار', 'مالية', 'مال', 'اقتصاد', 'استراتيجية', 'إدارة', 'ريادة', 'تسويق', 'عميل', 'نمو', 'ابتكار', 'قيادة']
+        : ['business', 'startup', 'company', 'market', 'sales', 'revenue', 'profit', 'investment', 'finance', 'money', 'economy', 'strategy', 'management', 'entrepreneur', 'marketing', 'customer', 'growth', 'innovation', 'leadership'],
+      weight: 0
+    },
+    health: {
+      keywords: language === 'ar'
+        ? ['صحة', 'طبي', 'طبيب', 'مستشفى', 'دواء', 'لياقة', 'تمرين', 'عافية', 'تغذية', 'حمية', 'صحة نفسية', 'علاج', 'مرض', 'أعراض', 'تشخيص', 'وقاية', 'رعاية صحية']
+        : ['health', 'medical', 'doctor', 'hospital', 'medicine', 'fitness', 'exercise', 'wellness', 'nutrition', 'diet', 'mental health', 'therapy', 'treatment', 'disease', 'symptoms', 'diagnosis', 'prevention', 'healthcare'],
+      weight: 0
+    },
+    education: {
+      keywords: language === 'ar'
+        ? ['تعليم', 'تعلم', 'مدرسة', 'جامعة', 'دورة', 'دراسة', 'بحث', 'أكاديمي', 'معرفة', 'تدريس', 'طالب', 'تدريب', 'مهارة', 'درس', 'شرح', 'دليل', 'تعليمات']
+        : ['education', 'learning', 'school', 'university', 'course', 'study', 'research', 'academic', 'knowledge', 'teaching', 'student', 'training', 'skill', 'lesson', 'tutorial', 'guide', 'instruction'],
+      weight: 0
+    },
+    science: {
+      keywords: language === 'ar'
+        ? ['علم', 'بحث', 'دراسة', 'تجربة', 'اكتشاف', 'ابتكار', 'علمي', 'تحليل', 'نظرية', 'فرضية', 'أحياء', 'كيمياء', 'فيزياء', 'رياضيات', 'هندسة']
+        : ['science', 'research', 'study', 'experiment', 'discovery', 'innovation', 'scientific', 'analysis', 'theory', 'hypothesis', 'biology', 'chemistry', 'physics', 'mathematics', 'engineering'],
+      weight: 0
+    },
+    lifestyle: {
+      keywords: language === 'ar'
+        ? ['نمط حياة', 'سفر', 'طعام', 'طبخ', 'وصفة', 'موضة', 'أسلوب', 'منزل', 'عائلة', 'علاقة', 'هواية', 'ترفيه', 'ثقافة', 'فن', 'موسيقى', 'رياضة']
+        : ['lifestyle', 'travel', 'food', 'cooking', 'recipe', 'fashion', 'style', 'home', 'family', 'relationship', 'hobby', 'entertainment', 'culture', 'art', 'music', 'sports', 'fitness'],
+      weight: 0
+    },
+    news: {
+      keywords: language === 'ar'
+        ? ['أخبار', 'عاجل', 'تحديث', 'إعلان', 'تقرير', 'حالي', 'أحداث', 'سياسة', 'حكومة', 'عالم', 'دولي', 'محلي', 'خبر عاجل', 'عنوان']
+        : ['news', 'breaking', 'update', 'announcement', 'report', 'current', 'events', 'politics', 'government', 'world', 'international', 'local', 'breaking news', 'headline'],
+      weight: 0
+    },
+    productivity: {
+      keywords: language === 'ar'
+        ? ['إنتاجية', 'عمل', 'وظيفة', 'مهنة', 'مهني', 'مكتب', 'اجتماع', 'مشروع', 'مهمة', 'موعد نهائي', 'كفاءة', 'تنظيم', 'تخطيط', 'إدارة وقت', 'سير عمل']
+        : ['productivity', 'work', 'job', 'career', 'professional', 'office', 'meeting', 'project', 'task', 'deadline', 'efficiency', 'organization', 'planning', 'time management', 'workflow'],
+      weight: 0
+    }
+  };
   
   // Calculate weighted scores for each category
   Object.entries(topicCategories).forEach(([category, data]) => {
@@ -391,104 +356,6 @@ function performSemanticAnalysis(content: string, language: string) {
   };
 }
 
-function getTopicCategoriesForLanguage(language: string) {
-  // Default English categories
-  const englishCategories = {
-    technology: {
-      keywords: ['ai', 'artificial intelligence', 'machine learning', 'software', 'programming', 'code', 'tech', 'computer', 'digital', 'app', 'website', 'internet', 'data', 'algorithm', 'development', 'blockchain', 'cryptocurrency', 'cloud', 'api', 'database'],
-      weight: 0
-    },
-    business: {
-      keywords: ['business', 'startup', 'company', 'market', 'sales', 'revenue', 'profit', 'investment', 'finance', 'money', 'economy', 'strategy', 'management', 'entrepreneur', 'marketing', 'customer', 'growth', 'innovation', 'leadership'],
-      weight: 0
-    },
-    health: {
-      keywords: ['health', 'medical', 'doctor', 'hospital', 'medicine', 'fitness', 'exercise', 'wellness', 'nutrition', 'diet', 'mental health', 'therapy', 'treatment', 'disease', 'symptoms', 'diagnosis', 'prevention', 'healthcare'],
-      weight: 0
-    },
-    education: {
-      keywords: ['education', 'learning', 'school', 'university', 'course', 'study', 'research', 'academic', 'knowledge', 'teaching', 'student', 'training', 'skill', 'lesson', 'tutorial', 'guide', 'instruction'],
-      weight: 0
-    },
-    science: {
-      keywords: ['science', 'research', 'study', 'experiment', 'discovery', 'innovation', 'scientific', 'analysis', 'theory', 'hypothesis', 'biology', 'chemistry', 'physics', 'mathematics', 'engineering'],
-      weight: 0
-    },
-    lifestyle: {
-      keywords: ['lifestyle', 'travel', 'food', 'cooking', 'recipe', 'fashion', 'style', 'home', 'family', 'relationship', 'hobby', 'entertainment', 'culture', 'art', 'music', 'sports', 'fitness'],
-      weight: 0
-    },
-    news: {
-      keywords: ['news', 'breaking', 'update', 'announcement', 'report', 'current', 'events', 'politics', 'government', 'world', 'international', 'local', 'breaking news', 'headline'],
-      weight: 0
-    },
-    productivity: {
-      keywords: ['productivity', 'work', 'job', 'career', 'professional', 'office', 'meeting', 'project', 'task', 'deadline', 'efficiency', 'organization', 'planning', 'time management', 'workflow'],
-      weight: 0
-    }
-  };
-
-  // Language-specific categories (simplified for demo - in production, you'd have comprehensive translations)
-  const languageCategories = {
-    'es': {
-      technology: {
-        keywords: ['tecnología', 'inteligencia artificial', 'programación', 'software', 'código', 'computadora', 'digital', 'aplicación', 'sitio web', 'internet', 'datos', 'algoritmo', 'desarrollo', 'blockchain', 'criptomoneda', 'nube', 'api', 'base de datos'],
-        weight: 0
-      },
-      business: {
-        keywords: ['negocio', 'empresa', 'mercado', 'ventas', 'ingresos', 'ganancia', 'inversión', 'finanzas', 'dinero', 'economía', 'estrategia', 'gestión', 'emprendedor', 'marketing', 'cliente', 'crecimiento', 'innovación', 'liderazgo'],
-        weight: 0
-      },
-      health: {
-        keywords: ['salud', 'médico', 'doctor', 'hospital', 'medicina', 'ejercicio', 'bienestar', 'nutrición', 'dieta', 'salud mental', 'terapia', 'tratamiento', 'enfermedad', 'síntomas', 'diagnóstico', 'prevención', 'atención médica'],
-        weight: 0
-      },
-      education: {
-        keywords: ['educación', 'aprendizaje', 'escuela', 'universidad', 'curso', 'estudio', 'investigación', 'académico', 'conocimiento', 'enseñanza', 'estudiante', 'entrenamiento', 'habilidad', 'lección', 'tutorial', 'guía', 'instrucción'],
-        weight: 0
-      }
-    },
-    'fr': {
-      technology: {
-        keywords: ['technologie', 'intelligence artificielle', 'programmation', 'logiciel', 'code', 'ordinateur', 'numérique', 'application', 'site web', 'internet', 'données', 'algorithme', 'développement', 'blockchain', 'cryptomonnaie', 'nuage', 'api', 'base de données'],
-        weight: 0
-      },
-      business: {
-        keywords: ['entreprise', 'société', 'marché', 'ventes', 'revenus', 'profit', 'investissement', 'finance', 'argent', 'économie', 'stratégie', 'gestion', 'entrepreneur', 'marketing', 'client', 'croissance', 'innovation', 'leadership'],
-        weight: 0
-      },
-      health: {
-        keywords: ['santé', 'médical', 'docteur', 'hôpital', 'médecine', 'exercice', 'bien-être', 'nutrition', 'régime', 'santé mentale', 'thérapie', 'traitement', 'maladie', 'symptômes', 'diagnostic', 'prévention', 'soins de santé'],
-        weight: 0
-      },
-      education: {
-        keywords: ['éducation', 'apprentissage', 'école', 'université', 'cours', 'étude', 'recherche', 'académique', 'connaissance', 'enseignement', 'étudiant', 'formation', 'compétence', 'leçon', 'tutoriel', 'guide', 'instruction'],
-        weight: 0
-      }
-    },
-    'de': {
-      technology: {
-        keywords: ['technologie', 'künstliche intelligenz', 'programmierung', 'software', 'code', 'computer', 'digital', 'anwendung', 'webseite', 'internet', 'daten', 'algorithmus', 'entwicklung', 'blockchain', 'kryptowährung', 'cloud', 'api', 'datenbank'],
-        weight: 0
-      },
-      business: {
-        keywords: ['geschäft', 'unternehmen', 'markt', 'verkäufe', 'einnahmen', 'gewinn', 'investition', 'finanzen', 'geld', 'wirtschaft', 'strategie', 'management', 'unternehmer', 'marketing', 'kunde', 'wachstum', 'innovation', 'führung'],
-        weight: 0
-      },
-      health: {
-        keywords: ['gesundheit', 'medizinisch', 'arzt', 'krankenhaus', 'medizin', 'übung', 'wohlbefinden', 'ernährung', 'diät', 'geistige gesundheit', 'therapie', 'behandlung', 'krankheit', 'symptome', 'diagnose', 'prävention', 'gesundheitswesen'],
-        weight: 0
-      },
-      education: {
-        keywords: ['bildung', 'lernen', 'schule', 'universität', 'kurs', 'studium', 'forschung', 'akademisch', 'wissen', 'unterricht', 'student', 'ausbildung', 'fähigkeit', 'lektion', 'tutorial', 'anleitung', 'unterricht'],
-        weight: 0
-      }
-    }
-  };
-
-  return languageCategories[language] || englishCategories;
-}
-
 function extractContextualInformation(content: string, type: string) {
   const context = {
     contentType: type,
@@ -501,21 +368,21 @@ function extractContextualInformation(content: string, type: string) {
   
   const text = content.toLowerCase();
   
-  // Detect urgency
-  const urgentWords = ['urgent', 'asap', 'immediately', 'deadline', 'emergency', 'critical', 'important'];
+  // Detect urgency (Arabic and English)
+  const urgentWords = ['urgent', 'asap', 'immediately', 'deadline', 'emergency', 'critical', 'important', 'عاجل', 'فوري', 'مهم', 'طارئ', 'موعد نهائي'];
   if (urgentWords.some(word => text.includes(word))) {
     context.urgency = 'high';
   }
   
-  // Detect if actionable
-  const actionWords = ['todo', 'task', 'action', 'need to', 'should', 'must', 'remember to', 'don\'t forget'];
+  // Detect if actionable (Arabic and English)
+  const actionWords = ['todo', 'task', 'action', 'need to', 'should', 'must', 'remember to', 'don\'t forget', 'مهمة', 'عمل', 'يجب', 'لا تنس', 'تذكر'];
   if (actionWords.some(word => text.includes(word))) {
     context.actionable = true;
   }
   
-  // Detect personal vs professional
-  const personalWords = ['i', 'me', 'my', 'personal', 'family', 'friend', 'home'];
-  const professionalWords = ['work', 'office', 'business', 'client', 'meeting', 'project', 'team'];
+  // Detect personal vs professional (Arabic and English)
+  const personalWords = ['i', 'me', 'my', 'personal', 'family', 'friend', 'home', 'أنا', 'لي', 'شخصي', 'عائلة', 'صديق', 'منزل'];
+  const professionalWords = ['work', 'office', 'business', 'client', 'meeting', 'project', 'team', 'عمل', 'مكتب', 'أعمال', 'عميل', 'اجتماع', 'مشروع', 'فريق'];
   
   const personalScore = personalWords.filter(word => text.includes(word)).length;
   const professionalScore = professionalWords.filter(word => text.includes(word)).length;
@@ -539,11 +406,14 @@ function generateIntelligentTitle(content: string, structure: any, semantic: any
   // Score sentences based on multiple factors
   const scoredSentences = sentences.map(sentence => {
     let score = 0;
-    const words = sentence.toLowerCase().split(/\s+/);
+    const words = sentence.trim().split(/\s+/);
     
-    // Prefer shorter sentences for titles (5-15 words)
-    if (words.length >= 5 && words.length <= 15) score += 3;
-    else if (words.length <= 20) score += 1;
+    // Prefer shorter sentences for titles (3-12 words for Arabic, 5-15 for English)
+    const minWords = language === 'ar' ? 3 : 5;
+    const maxWords = language === 'ar' ? 12 : 15;
+    
+    if (words.length >= minWords && words.length <= maxWords) score += 3;
+    else if (words.length <= maxWords + 5) score += 1;
     
     // Boost sentences with key phrases
     semantic.keyPhrases.forEach(phrase => {
@@ -579,34 +449,29 @@ function generateIntelligentTitle(content: string, structure: any, semantic: any
   let title = bestSentence.sentence.trim();
   
   // Remove common prefixes based on language
-  const prefixPatterns = {
-    'en': /^(the|a|an|this|that|these|those)\s+/i,
-    'es': /^(el|la|los|las|un|una|este|esta|estos|estas)\s+/i,
-    'fr': /^(le|la|les|un|une|ce|cette|ces)\s+/i,
-    'de': /^(der|die|das|ein|eine|dieser|diese|dieses)\s+/i,
-    'it': /^(il|la|lo|gli|le|un|una|questo|questa|questi|queste)\s+/i,
-    'pt': /^(o|a|os|as|um|uma|este|esta|estes|estas)\s+/i
-  };
-  
-  const pattern = prefixPatterns[language] || prefixPatterns['en'];
-  title = title.replace(pattern, '');
+  if (language === 'ar') {
+    title = title.replace(/^(ال|هذا|هذه|تلك|ذلك)\s+/i, '');
+  } else {
+    title = title.replace(/^(the|a|an|this|that|these|those)\s+/i, '');
+  }
   
   // Capitalize properly
   title = title.charAt(0).toUpperCase() + title.slice(1);
   
   // Remove trailing punctuation except for questions
-  if (!title.endsWith('?')) {
-    title = title.replace(/[.!,;:]+$/, '');
+  if (!title.endsWith('?') && !title.endsWith('؟')) {
+    title = title.replace(/[.!,;:؟]+$/, '');
   }
   
-  // Ensure reasonable length (max 8 words as requested)
+  // Ensure reasonable length
   const words = title.split(' ');
-  if (words.length > 8) {
-    title = words.slice(0, 8).join(' ') + '...';
+  const maxTitleWords = language === 'ar' ? 10 : 8;
+  if (words.length > maxTitleWords) {
+    title = words.slice(0, maxTitleWords).join(' ') + '...';
   }
   
   // Ensure minimum quality
-  if (title.length < 10 || words.length < 3) {
+  if (title.length < 8 || words.length < 2) {
     return generateFallbackTitle(semantic.dominantTopics[0] || 'note', language);
   }
   
@@ -617,31 +482,7 @@ function generateIntelligentSummary(content: string, structure: any, semantic: a
   const sentences = structure.sentences;
   
   if (sentences.length === 0) {
-    const noContentMessages = {
-      'en': 'No content available for summary.',
-      'es': 'No hay contenido disponible para el resumen.',
-      'fr': 'Aucun contenu disponible pour le résumé.',
-      'de': 'Kein Inhalt für die Zusammenfassung verfügbar.',
-      'it': 'Nessun contenuto disponibile per il riassunto.',
-      'pt': 'Nenhum conteúdo disponível para resumo.',
-      'nl': 'Geen inhoud beschikbaar voor samenvatting.',
-      'sv': 'Inget innehåll tillgängligt för sammanfattning.',
-      'da': 'Intet indhold tilgængeligt for sammendrag.',
-      'no': 'Ingen innhold tilgjengelig for sammendrag.',
-      'fi': 'Ei sisältöä saatavilla yhteenvetoa varten.',
-      'pl': 'Brak treści dostępnej do podsumowania.',
-      'cs': 'Žádný obsah není k dispozici pro shrnutí.',
-      'hu': 'Nincs elérhető tartalom az összefoglaláshoz.',
-      'ro': 'Nu există conținut disponibil pentru rezumat.',
-      'bg': 'Няма налично съдържание за резюме.',
-      'hr': 'Nema dostupnog sadržaja za sažetak.',
-      'sk': 'Žiadny obsah nie je k dispozícii pre zhrnutie.',
-      'sl': 'Ni na voljo vsebine za povzetek.',
-      'et': 'Kokkuvõtte jaoks pole sisu saadaval.',
-      'lv': 'Nav pieejama satura kopsavilkumam.',
-      'lt': 'Nėra turinio santraukai.'
-    };
-    return noContentMessages[language] || noContentMessages['en'];
+    return language === 'ar' ? 'لا يوجد محتوى متاح للملخص.' : 'No content available for summary.';
   }
   
   // For short content, use the content itself
@@ -652,11 +493,14 @@ function generateIntelligentSummary(content: string, structure: any, semantic: a
   // Score sentences for summary inclusion
   const scoredSentences = sentences.map((sentence, index) => {
     let score = 0;
-    const words = sentence.toLowerCase().split(/\s+/);
+    const words = sentence.trim().split(/\s+/);
     
-    // Prefer sentences with good length (10-30 words)
-    if (words.length >= 10 && words.length <= 30) score += 2;
-    else if (words.length >= 5 && words.length <= 40) score += 1;
+    // Prefer sentences with good length (8-25 words for Arabic, 10-30 for English)
+    const minWords = language === 'ar' ? 8 : 10;
+    const maxWords = language === 'ar' ? 25 : 30;
+    
+    if (words.length >= minWords && words.length <= maxWords) score += 2;
+    else if (words.length >= 5 && words.length <= maxWords + 10) score += 1;
     
     // Boost sentences with key phrases
     semantic.keyPhrases.forEach(phrase => {
@@ -693,17 +537,18 @@ function generateIntelligentSummary(content: string, structure: any, semantic: a
   let summary = selectedSentences.join(' ').trim();
   
   // Ensure proper ending
-  if (!summary.endsWith('.') && !summary.endsWith('!') && !summary.endsWith('?')) {
+  if (!summary.endsWith('.') && !summary.endsWith('!') && !summary.endsWith('?') && !summary.endsWith('؟')) {
     summary += '.';
   }
   
-  // Limit length to 2-3 lines (approximately 200-250 characters)
-  if (summary.length > 250) {
-    const breakPoint = summary.lastIndexOf('.', 200);
+  // Limit length to 2-3 lines (approximately 200-300 characters for Arabic, 200-250 for English)
+  const maxLength = language === 'ar' ? 300 : 250;
+  if (summary.length > maxLength) {
+    const breakPoint = summary.lastIndexOf('.', maxLength - 50);
     if (breakPoint > 100) {
       summary = summary.substring(0, breakPoint + 1);
     } else {
-      summary = summary.substring(0, 197) + '...';
+      summary = summary.substring(0, maxLength - 3) + '...';
     }
   }
   
@@ -718,23 +563,65 @@ function generateIntelligentSummary(content: string, structure: any, semantic: a
 function generateIntelligentTags(content: string, structure: any, semantic: any, context: any, language: string): string[] {
   const tags = new Set<string>();
   
-  // Add content type
-  tags.add(context.contentType);
+  // Add content type in appropriate language
+  const typeTranslations = {
+    ar: { text: 'نص', url: 'رابط', file: 'ملف', image: 'صورة' },
+    en: { text: 'text', url: 'url', file: 'file', image: 'image' }
+  };
+  
+  const typeTag = language === 'ar' ? typeTranslations.ar[context.contentType] : typeTranslations.en[context.contentType];
+  if (typeTag) tags.add(typeTag);
   
   // Add dominant topics
-  semantic.dominantTopics.forEach(topic => tags.add(topic));
+  semantic.dominantTopics.forEach(topic => {
+    const topicTranslations = {
+      ar: {
+        technology: 'تقنية',
+        business: 'أعمال',
+        health: 'صحة',
+        education: 'تعليم',
+        science: 'علوم',
+        lifestyle: 'نمط حياة',
+        news: 'أخبار',
+        productivity: 'إنتاجية'
+      },
+      en: {
+        technology: 'technology',
+        business: 'business',
+        health: 'health',
+        education: 'education',
+        science: 'science',
+        lifestyle: 'lifestyle',
+        news: 'news',
+        productivity: 'productivity'
+      }
+    };
+    
+    const topicTag = language === 'ar' ? topicTranslations.ar[topic] : topicTranslations.en[topic];
+    if (topicTag) tags.add(topicTag);
+  });
   
   // Add key phrases (cleaned)
   semantic.keyPhrases.forEach(phrase => {
-    const cleanPhrase = phrase.toLowerCase().replace(/[^\w\s]/g, '').trim();
-    if (cleanPhrase.length > 2 && cleanPhrase.length < 20) {
+    const cleanPhrase = phrase.toLowerCase().replace(/[^\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\w\s]/g, '').trim();
+    if (cleanPhrase.length > 2 && cleanPhrase.length < 25) {
       tags.add(cleanPhrase);
     }
   });
   
-  // Add context-based tags with language support
-  const contextTags = {
-    'en': {
+  // Add context-based tags in appropriate language
+  const contextTranslations = {
+    ar: {
+      actionable: 'قابل للتنفيذ',
+      urgent: 'عاجل',
+      personal: 'شخصي',
+      work: 'عمل',
+      questions: 'أسئلة',
+      list: 'قائمة',
+      data: 'بيانات',
+      detailed: 'مفصل'
+    },
+    en: {
       actionable: 'actionable',
       urgent: 'urgent',
       personal: 'personal',
@@ -742,79 +629,59 @@ function generateIntelligentTags(content: string, structure: any, semantic: any,
       questions: 'questions',
       list: 'list',
       data: 'data',
-      detailed: 'detailed',
-      note: 'note',
-      content: 'content',
-      information: 'information'
-    },
-    'es': {
-      actionable: 'accionable',
-      urgent: 'urgente',
-      personal: 'personal',
-      work: 'trabajo',
-      questions: 'preguntas',
-      list: 'lista',
-      data: 'datos',
-      detailed: 'detallado',
-      note: 'nota',
-      content: 'contenido',
-      information: 'información'
-    },
-    'fr': {
-      actionable: 'actionnable',
-      urgent: 'urgent',
-      personal: 'personnel',
-      work: 'travail',
-      questions: 'questions',
-      list: 'liste',
-      data: 'données',
-      detailed: 'détaillé',
-      note: 'note',
-      content: 'contenu',
-      information: 'information'
-    },
-    'de': {
-      actionable: 'umsetzbar',
-      urgent: 'dringend',
-      personal: 'persönlich',
-      work: 'arbeit',
-      questions: 'fragen',
-      list: 'liste',
-      data: 'daten',
-      detailed: 'detailliert',
-      note: 'notiz',
-      content: 'inhalt',
-      information: 'information'
+      detailed: 'detailed'
     }
   };
   
-  const langTags = contextTags[language] || contextTags['en'];
-  
-  if (context.actionable) tags.add(langTags.actionable);
-  if (context.urgency === 'high') tags.add(langTags.urgent);
-  if (context.personal) tags.add(langTags.personal);
-  if (context.professional) tags.add(langTags.work);
+  if (context.actionable) tags.add(language === 'ar' ? contextTranslations.ar.actionable : contextTranslations.en.actionable);
+  if (context.urgency === 'high') tags.add(language === 'ar' ? contextTranslations.ar.urgent : contextTranslations.en.urgent);
+  if (context.personal) tags.add(language === 'ar' ? contextTranslations.ar.personal : contextTranslations.en.personal);
+  if (context.professional) tags.add(language === 'ar' ? contextTranslations.ar.work : contextTranslations.en.work);
   
   // Add sentiment if strong
   if (semantic.sentiment !== 'neutral') {
-    tags.add(semantic.sentiment);
+    const sentimentTranslations = {
+      ar: { positive: 'إيجابي', negative: 'سلبي' },
+      en: { positive: 'positive', negative: 'negative' }
+    };
+    const sentimentTag = language === 'ar' ? sentimentTranslations.ar[semantic.sentiment] : sentimentTranslations.en[semantic.sentiment];
+    if (sentimentTag) tags.add(sentimentTag);
   }
   
   // Add intent-based tags
   if (semantic.intent) {
-    tags.add(semantic.intent);
+    const intentTranslations = {
+      ar: {
+        task: 'مهمة',
+        idea: 'فكرة',
+        note: 'ملاحظة',
+        learning: 'تعلم',
+        planning: 'تخطيط',
+        information: 'معلومات'
+      },
+      en: {
+        task: 'task',
+        idea: 'idea',
+        note: 'note',
+        learning: 'learning',
+        planning: 'planning',
+        information: 'information'
+      }
+    };
+    const intentTag = language === 'ar' ? intentTranslations.ar[semantic.intent] : intentTranslations.en[semantic.intent];
+    if (intentTag) tags.add(intentTag);
   }
   
   // Add structural tags
-  if (structure.hasQuestions) tags.add(langTags.questions);
-  if (structure.hasLists) tags.add(langTags.list);
-  if (structure.hasNumbers) tags.add(langTags.data);
-  if (structure.complexity === 'complex') tags.add(langTags.detailed);
+  if (structure.hasQuestions) tags.add(language === 'ar' ? contextTranslations.ar.questions : contextTranslations.en.questions);
+  if (structure.hasLists) tags.add(language === 'ar' ? contextTranslations.ar.list : contextTranslations.en.list);
+  if (structure.hasNumbers) tags.add(language === 'ar' ? contextTranslations.ar.data : contextTranslations.en.data);
+  if (structure.complexity === 'complex') tags.add(language === 'ar' ? contextTranslations.ar.detailed : contextTranslations.en.detailed);
   
   // Extract important words
-  const importantWords = extractImportantWords(content);
+  const importantWords = extractImportantWords(content, language);
   importantWords.forEach(word => {
-    if (word.length > 3 && word.length < 15) {
+    if (word.length > 2 && word.length < 20) {
       tags.add(word);
     }
   });
@@ -824,7 +691,8 @@ function generateIntelligentTags(content: string, structure: any, semantic: any,
   
   // Ensure we have at least some basic tags
   if (tagArray.length < 3) {
-    tagArray.push(langTags.note, langTags.content, langTags.information);
+    const basicTags = language === 'ar' ? ['ملاحظة', 'محتوى', 'معلومات'] : ['note', 'content', 'information'];
+    tagArray.push(...basicTags);
   }
   
   return tagArray;
@@ -834,148 +702,191 @@ function extractKeyPhrases(content: string, language: string): string[] {
   const text = content.toLowerCase();
   const phrases: string[] = [];
   
-  // Extract noun phrases (simplified)
-  const nounPhrasePattern = /\b(?:the\s+)?(?:[\w]+\s+){0,2}[\w]+(?:\s+(?:of|for|in|on|with|by)\s+[\w]+)?\b/g;
-  const matches = text.match(nounPhrasePattern) || [];
-  
-  // Score and filter phrases
-  const scoredPhrases = matches
-    .filter(phrase => phrase.length > 5 && phrase.length < 50)
-    .map(phrase => {
-      let score = 0;
-      const words = phrase.split(/\s+/);
-      
-      // Prefer 2-4 word phrases
-      if (words.length >= 2 && words.length <= 4) score += 2;
-      
-      return { phrase: phrase.trim(), score };
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
-    .map(item => item.phrase);
-  
-  return scoredPhrases;
+  if (language === 'ar') {
+    // Arabic phrase extraction - simplified
+    const arabicPhrasePattern = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\s]{5,50}/g;
+    const matches = content.match(arabicPhrasePattern) || [];
+    
+    const scoredPhrases = matches
+      .filter(phrase => phrase.trim().length > 5 && phrase.trim().length < 50)
+      .map(phrase => {
+        let score = 0;
+        const words = phrase.trim().split(/\s+/);
+        
+        // Prefer 2-5 word phrases for Arabic
+        if (words.length >= 2 && words.length <= 5) score += 2;
+        
+        return { phrase: phrase.trim(), score };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map(item => item.phrase);
+    
+    return scoredPhrases;
+  } else {
+    // English phrase extraction
+    const nounPhrasePattern = /\b(?:the\s+)?(?:[\w]+\s+){0,2}[\w]+(?:\s+(?:of|for|in|on|with|by)\s+[\w]+)?\b/g;
+    const matches = text.match(nounPhrasePattern) || [];
+    
+    const scoredPhrases = matches
+      .filter(phrase => phrase.length > 5 && phrase.length < 50)
+      .map(phrase => {
+        let score = 0;
+        const words = phrase.split(/\s+/);
+        
+        // Prefer 2-4 word phrases
+        if (words.length >= 2 && words.length <= 4) score += 2;
+        
+        return { phrase: phrase.trim(), score };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5)
+      .map(item => item.phrase);
+    
+    return scoredPhrases;
+  }
 }
 
-function extractImportantWords(content: string): string[] {
+function extractImportantWords(content: string, language: string): string[] {
   const text = content.toLowerCase();
-  const words = text.match(/\b\w{4,}\b/g) || [];
   
-  // Common words to exclude (multilingual)
-  const commonWords = new Set([
-    // English
-    'this', 'that', 'with', 'have', 'will', 'been', 'from', 'they', 'know', 'want',
-    'were', 'said', 'each', 'which', 'their', 'time', 'would', 'there', 'could',
-    'other', 'after', 'first', 'well', 'also', 'where', 'much', 'should', 'very',
-    'when', 'come', 'here', 'just', 'like', 'long', 'make', 'many', 'over', 'such',
-    'take', 'than', 'them', 'well', 'were', 'what', 'your', 'about', 'before',
-    'being', 'between', 'both', 'during', 'into', 'through', 'under', 'while',
-    // Spanish
-    'este', 'esta', 'estos', 'estas', 'tener', 'sido', 'desde', 'ellos', 'saber', 'querer',
-    'fueron', 'dijo', 'cada', 'cual', 'tiempo', 'sería', 'allí', 'podría',
-    'otro', 'después', 'primero', 'bien', 'también', 'donde', 'mucho', 'debería', 'muy',
-    'cuando', 'venir', 'aquí', 'solo', 'como', 'largo', 'hacer', 'muchos', 'sobre', 'tal',
-    // French
-    'cette', 'avoir', 'été', 'depuis', 'savoir', 'vouloir',
-    'étaient', 'chaque', 'lequel', 'temps', 'serait', 'pourrait',
-    'autre', 'après', 'premier', 'bien', 'aussi', 'beaucoup', 'devrait', 'très',
-    'quand', 'venir', 'juste', 'comme', 'long', 'faire', 'beaucoup', 'tel',
-    // German
-    'diese', 'haben', 'gewesen', 'seit', 'wissen', 'wollen',
-    'waren', 'jeder', 'welcher', 'zeit', 'würde', 'könnte',
-    'andere', 'nach', 'erste', 'auch', 'viel', 'sollte', 'sehr',
-    'wann', 'kommen', 'hier', 'nur', 'lang', 'machen', 'viele', 'über', 'solche'
-  ]);
-  
-  // Count word frequency
-  const wordCount: Record<string, number> = {};
-  words.forEach(word => {
-    if (!commonWords.has(word) && word.length >= 4) {
-      wordCount[word] = (wordCount[word] || 0) + 1;
-    }
-  });
-  
-  // Return most frequent important words
-  return Object.entries(wordCount)
-    .sort(([,a], [,b]) => b - a)
-    .slice(0, 8)
-    .map(([word]) => word);
+  if (language === 'ar') {
+    // Arabic word extraction
+    const words = content.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]{3,}/g) || [];
+    
+    // Arabic common words to exclude
+    const commonWords = new Set([
+      'هذا', 'هذه', 'ذلك', 'تلك', 'التي', 'الذي', 'التي', 'اللذان', 'اللتان', 'اللذين', 'اللتين',
+      'الذين', 'اللواتي', 'اللاتي', 'عند', 'عندما', 'حيث', 'كيف', 'متى', 'أين', 'ماذا', 'لماذا',
+      'كان', 'كانت', 'كانوا', 'كنا', 'كنت', 'يكون', 'تكون', 'أكون', 'نكون', 'تكونوا', 'يكونوا'
+    ]);
+    
+    // Count word frequency
+    const wordCount: Record<string, number> = {};
+    words.forEach(word => {
+      if (!commonWords.has(word) && word.length >= 3) {
+        wordCount[word] = (wordCount[word] || 0) + 1;
+      }
+    });
+    
+    return Object.entries(wordCount)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 8)
+      .map(([word]) => word);
+  } else {
+    // English word extraction
+    const words = text.match(/\b\w{4,}\b/g) || [];
+    
+    // Common words to exclude
+    const commonWords = new Set([
+      'this', 'that', 'with', 'have', 'will', 'been', 'from', 'they', 'know', 'want',
+      'were', 'said', 'each', 'which', 'their', 'time', 'would', 'there', 'could',
+      'other', 'after', 'first', 'well', 'also', 'where', 'much', 'should', 'very',
+      'when', 'come', 'here', 'just', 'like', 'long', 'make', 'many', 'over', 'such',
+      'take', 'than', 'them', 'well', 'were', 'what', 'your', 'about', 'before',
+      'being', 'between', 'both', 'during', 'into', 'through', 'under', 'while'
+    ]);
+    
+    // Count word frequency
+    const wordCount: Record<string, number> = {};
+    words.forEach(word => {
+      if (!commonWords.has(word) && word.length >= 4) {
+        wordCount[word] = (wordCount[word] || 0) + 1;
+      }
+    });
+    
+    return Object.entries(wordCount)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 8)
+      .map(([word]) => word);
+  }
 }
 
 function detectIntent(content: string, language: string): string {
   const text = content.toLowerCase();
   
-  // Language-specific intent keywords
-  const intentKeywords = {
-    'en': {
-      task: ['todo', 'task', 'need to', 'should', 'must', 'remember to', 'don\'t forget'],
-      idea: ['idea', 'concept', 'thought', 'brainstorm', 'innovation'],
-      note: ['note', 'reminder', 'memo', 'record', 'log'],
-      learning: ['learn', 'study', 'research', 'understand', 'explore'],
-      planning: ['plan', 'strategy', 'goal', 'objective', 'target']
-    },
-    'es': {
-      task: ['tarea', 'necesito', 'debería', 'debo', 'recordar', 'no olvidar'],
-      idea: ['idea', 'concepto', 'pensamiento', 'lluvia de ideas', 'innovación'],
-      note: ['nota', 'recordatorio', 'memo', 'registro'],
-      learning: ['aprender', 'estudiar', 'investigar', 'entender', 'explorar'],
-      planning: ['plan', 'estrategia', 'objetivo', 'meta']
-    },
-    'fr': {
-      task: ['tâche', 'besoin de', 'devrais', 'dois', 'rappeler', 'ne pas oublier'],
-      idea: ['idée', 'concept', 'pensée', 'brainstorming', 'innovation'],
-      note: ['note', 'rappel', 'mémo', 'enregistrement'],
-      learning: ['apprendre', 'étudier', 'rechercher', 'comprendre', 'explorer'],
-      planning: ['plan', 'stratégie', 'objectif', 'but']
-    },
-    'de': {
-      task: ['aufgabe', 'muss', 'sollte', 'erinnern', 'nicht vergessen'],
-      idea: ['idee', 'konzept', 'gedanke', 'brainstorming', 'innovation'],
-      note: ['notiz', 'erinnerung', 'memo', 'aufzeichnung'],
-      learning: ['lernen', 'studieren', 'forschen', 'verstehen', 'erkunden'],
-      planning: ['plan', 'strategie', 'ziel', 'objektiv']
+  if (language === 'ar') {
+    if (/\b(مهمة|عمل|يجب|لا تنس|تذكر|مطلوب)\b/.test(text)) {
+      return 'task';
     }
-  };
-  
-  const keywords = intentKeywords[language] || intentKeywords['en'];
-  
-  for (const [intent, words] of Object.entries(keywords)) {
-    if (words.some(word => text.includes(word))) {
-      return intent;
+    
+    if (/\b(فكرة|مفهوم|فكر|عصف ذهني|ابتكار)\b/.test(text)) {
+      return 'idea';
     }
+    
+    if (/\b(ملاحظة|تذكير|مذكرة|سجل|تسجيل)\b/.test(text)) {
+      return 'note';
+    }
+    
+    if (/\b(تعلم|دراسة|بحث|فهم|استكشاف)\b/.test(text)) {
+      return 'learning';
+    }
+    
+    if (/\b(خطة|استراتيجية|هدف|غاية|مقصد)\b/.test(text)) {
+      return 'planning';
+    }
+    
+    return 'information';
+  } else {
+    if (/\b(todo|task|need to|should|must|remember to|don't forget)\b/.test(text)) {
+      return 'task';
+    }
+    
+    if (/\b(idea|concept|thought|brainstorm|innovation)\b/.test(text)) {
+      return 'idea';
+    }
+    
+    if (/\b(note|reminder|memo|record|log)\b/.test(text)) {
+      return 'note';
+    }
+    
+    if (/\b(learn|study|research|understand|explore)\b/.test(text)) {
+      return 'learning';
+    }
+    
+    if (/\b(plan|strategy|goal|objective|target)\b/.test(text)) {
+      return 'planning';
+    }
+    
+    return 'information';
   }
-  
-  return 'information';
 }
 
 function analyzeSentiment(content: string, language: string): 'positive' | 'negative' | 'neutral' {
   const text = content.toLowerCase();
   
-  // Language-specific sentiment words
-  const sentimentWords = {
-    'en': {
-      positive: ['good', 'great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'like', 'happy', 'excited', 'awesome', 'brilliant', 'perfect', 'outstanding', 'success', 'achieve', 'accomplish', 'win', 'victory', 'benefit', 'positive', 'optimistic'],
-      negative: ['bad', 'terrible', 'awful', 'hate', 'dislike', 'sad', 'angry', 'frustrated', 'disappointed', 'horrible', 'annoying', 'boring', 'stupid', 'failure', 'lose', 'problem', 'issue', 'trouble', 'difficulty', 'negative', 'worried', 'stressed']
-    },
-    'es': {
-      positive: ['bueno', 'genial', 'excelente', 'increíble', 'maravilloso', 'fantástico', 'amor', 'gustar', 'feliz', 'emocionado', 'impresionante', 'brillante', 'perfecto', 'sobresaliente', 'éxito', 'lograr', 'ganar', 'victoria', 'beneficio', 'positivo', 'optimista'],
-      negative: ['malo', 'terrible', 'horrible', 'odiar', 'disgustar', 'triste', 'enojado', 'frustrado', 'decepcionado', 'molesto', 'aburrido', 'estúpido', 'fracaso', 'perder', 'problema', 'dificultad', 'negativo', 'preocupado', 'estresado']
-    },
-    'fr': {
-      positive: ['bon', 'génial', 'excellent', 'incroyable', 'merveilleux', 'fantastique', 'amour', 'aimer', 'heureux', 'excité', 'impressionnant', 'brillant', 'parfait', 'exceptionnel', 'succès', 'réaliser', 'gagner', 'victoire', 'bénéfice', 'positif', 'optimiste'],
-      negative: ['mauvais', 'terrible', 'affreux', 'détester', 'triste', 'en colère', 'frustré', 'déçu', 'horrible', 'ennuyeux', 'stupide', 'échec', 'perdre', 'problème', 'difficulté', 'négatif', 'inquiet', 'stressé']
-    },
-    'de': {
-      positive: ['gut', 'großartig', 'ausgezeichnet', 'erstaunlich', 'wunderbar', 'fantastisch', 'liebe', 'mögen', 'glücklich', 'aufgeregt', 'beeindruckend', 'brillant', 'perfekt', 'hervorragend', 'erfolg', 'erreichen', 'gewinnen', 'sieg', 'nutzen', 'positiv', 'optimistisch'],
-      negative: ['schlecht', 'schrecklich', 'furchtbar', 'hassen', 'traurig', 'wütend', 'frustriert', 'enttäuscht', 'schrecklich', 'langweilig', 'dumm', 'versagen', 'verlieren', 'problem', 'schwierigkeit', 'negativ', 'besorgt', 'gestresst']
-    }
-  };
+  let positiveWords: string[];
+  let negativeWords: string[];
+  
+  if (language === 'ar') {
+    positiveWords = [
+      'جيد', 'ممتاز', 'رائع', 'مذهل', 'رائع', 'فانتاستيك', 'أحب', 'أعجب',
+      'سعيد', 'متحمس', 'مدهش', 'لامع', 'مثالي', 'متميز', 'نجاح',
+      'تحقيق', 'إنجاز', 'فوز', 'انتصار', 'فائدة', 'إيجابي', 'متفائل'
+    ];
+    
+    negativeWords = [
+      'سيء', 'فظيع', 'مروع', 'أكره', 'لا أحب', 'حزين', 'غاضب', 'محبط',
+      'مخيب للآمال', 'مروع', 'مزعج', 'ممل', 'غبي', 'فشل', 'خسارة',
+      'مشكلة', 'قضية', 'مشكل', 'صعوبة', 'سلبي', 'قلق', 'متوتر'
+    ];
+  } else {
+    positiveWords = [
+      'good', 'great', 'excellent', 'amazing', 'wonderful', 'fantastic', 'love', 'like',
+      'happy', 'excited', 'awesome', 'brilliant', 'perfect', 'outstanding', 'success',
+      'achieve', 'accomplish', 'win', 'victory', 'benefit', 'positive', 'optimistic'
+    ];
+    
+    negativeWords = [
+      'bad', 'terrible', 'awful', 'hate', 'dislike', 'sad', 'angry', 'frustrated',
+      'disappointed', 'horrible', 'annoying', 'boring', 'stupid', 'failure', 'lose',
+      'problem', 'issue', 'trouble', 'difficulty', 'negative', 'worried', 'stressed'
+    ];
+  }
   
   const words = text.split(/\s+/);
-  const langWords = sentimentWords[language] || sentimentWords['en'];
-  
-  const positiveCount = words.filter(word => langWords.positive.includes(word)).length;
-  const negativeCount = words.filter(word => langWords.negative.includes(word)).length;
+  const positiveCount = words.filter(word => positiveWords.includes(word)).length;
+  const negativeCount = words.filter(word => negativeWords.includes(word)).length;
   
   const threshold = Math.max(1, words.length * 0.02);
   
@@ -986,15 +897,28 @@ function analyzeSentiment(content: string, language: string): 'positive' | 'nega
 
 function generateFallbackTitle(topic: string, language: string): string {
   const now = new Date();
-  const timestamp = now.toLocaleDateString('en-US', { 
+  const timestamp = now.toLocaleDateString(language === 'ar' ? 'ar-SA' : 'en-US', { 
     month: 'short', 
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit'
   });
   
-  const fallbackTitles = {
-    'en': {
+  if (language === 'ar') {
+    const topicTitles: Record<string, string> = {
+      technology: `رؤية تقنية - ${timestamp}`,
+      business: `ملاحظة أعمال - ${timestamp}`,
+      health: `معلومات صحية - ${timestamp}`,
+      education: `ملاحظة تعليمية - ${timestamp}`,
+      science: `ملاحظة بحثية - ${timestamp}`,
+      lifestyle: `ملاحظة حياتية - ${timestamp}`,
+      news: `تحديث إخباري - ${timestamp}`,
+      productivity: `ملاحظة عمل - ${timestamp}`
+    };
+    
+    return topicTitles[topic] || `ملاحظة ذكية - ${timestamp}`;
+  } else {
+    const topicTitles: Record<string, string> = {
       technology: `Tech Insight - ${timestamp}`,
       business: `Business Note - ${timestamp}`,
       health: `Health Info - ${timestamp}`,
@@ -1002,46 +926,11 @@ function generateFallbackTitle(topic: string, language: string): string {
       science: `Research Note - ${timestamp}`,
       lifestyle: `Life Note - ${timestamp}`,
       news: `News Update - ${timestamp}`,
-      productivity: `Work Note - ${timestamp}`,
-      default: `Smart Note - ${timestamp}`
-    },
-    'es': {
-      technology: `Información Tech - ${timestamp}`,
-      business: `Nota de Negocio - ${timestamp}`,
-      health: `Info de Salud - ${timestamp}`,
-      education: `Nota de Aprendizaje - ${timestamp}`,
-      science: `Nota de Investigación - ${timestamp}`,
-      lifestyle: `Nota de Vida - ${timestamp}`,
-      news: `Actualización - ${timestamp}`,
-      productivity: `Nota de Trabajo - ${timestamp}`,
-      default: `Nota Inteligente - ${timestamp}`
-    },
-    'fr': {
-      technology: `Aperçu Tech - ${timestamp}`,
-      business: `Note Business - ${timestamp}`,
-      health: `Info Santé - ${timestamp}`,
-      education: `Note d'Apprentissage - ${timestamp}`,
-      science: `Note de Recherche - ${timestamp}`,
-      lifestyle: `Note de Vie - ${timestamp}`,
-      news: `Mise à jour - ${timestamp}`,
-      productivity: `Note de Travail - ${timestamp}`,
-      default: `Note Intelligente - ${timestamp}`
-    },
-    'de': {
-      technology: `Tech Einblick - ${timestamp}`,
-      business: `Business Notiz - ${timestamp}`,
-      health: `Gesundheits Info - ${timestamp}`,
-      education: `Lern Notiz - ${timestamp}`,
-      science: `Forschungs Notiz - ${timestamp}`,
-      lifestyle: `Lebens Notiz - ${timestamp}`,
-      news: `News Update - ${timestamp}`,
-      productivity: `Arbeits Notiz - ${timestamp}`,
-      default: `Intelligente Notiz - ${timestamp}`
-    }
-  };
-  
-  const langTitles = fallbackTitles[language] || fallbackTitles['en'];
-  return langTitles[topic] || langTitles.default;
+      productivity: `Work Note - ${timestamp}`
+    };
+    
+    return topicTitles[topic] || `Smart Note - ${timestamp}`;
+  }
 }
 
 function extractDomain(url: string): string {
@@ -1171,16 +1060,15 @@ export async function analyzeSpecificContent(content: string, contentType: strin
   tags: string[];
   metadata?: Record<string, any>;
 }> {
-  const detectedLanguage = detectLanguage(content);
   const baseAnalysis = await performEnhancedLocalAnalysis(content, 'text');
   
   // Add content-type specific analysis
   const metadata: Record<string, any> = {
     contentType,
-    language: detectedLanguage,
     wordCount: content.split(/\s+/).length,
     readingTime: Math.ceil(content.split(/\s+/).length / 200),
-    sentiment: analyzeSentiment(content, detectedLanguage),
+    language: detectLanguage(content),
+    sentiment: analyzeSentiment(content, detectLanguage(content)),
     complexity: analyzeComplexity(content)
   };
   
@@ -1191,7 +1079,7 @@ export async function analyzeSpecificContent(content: string, contentType: strin
 }
 
 function analyzeComplexity(content: string): 'simple' | 'moderate' | 'complex' {
-  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const sentences = content.split(/[.!?؟]+/).filter(s => s.trim().length > 0);
   const words = content.split(/\s+/);
   const avgWordsPerSentence = sentences.length > 0 ? words.length / sentences.length : 0;
   

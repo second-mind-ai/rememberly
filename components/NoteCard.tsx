@@ -1,7 +1,7 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert, I18nManager } from 'react-native';
 import { router } from 'expo-router';
-import { FileText, Link2, Image as ImageIcon, Calendar } from 'lucide-react-native';
+import { FileText, Link2, Image as ImageIcon, Calendar, ExternalLink, Globe } from 'lucide-react-native';
 import { Database } from '@/lib/supabase';
 
 type Note = Database['public']['Tables']['notes']['Row'];
@@ -38,6 +38,25 @@ export function NoteCard({ note }: NoteCardProps) {
     });
   };
 
+  const handleSourceUrlPress = async (event: any) => {
+    event.stopPropagation(); // Prevent card navigation
+    
+    if (note.source_url) {
+      try {
+        const canOpen = await Linking.canOpenURL(note.source_url);
+        if (canOpen) {
+          await Linking.openURL(note.source_url);
+        } else {
+          Alert.alert('Error', 'Cannot open this URL');
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Failed to open URL');
+      }
+    }
+  };
+
+  const isRTL = I18nManager.isRTL;
+
   return (
     <TouchableOpacity
       style={styles.card}
@@ -54,19 +73,34 @@ export function NoteCard({ note }: NoteCardProps) {
         </View>
       </View>
 
-      <Text style={styles.title} numberOfLines={2}>
+      <Text style={[styles.title, isRTL && styles.rtlText]} numberOfLines={2}>
         {note.title || 'Untitled Note'}
       </Text>
 
-      <Text style={styles.summary} numberOfLines={3}>
+      <Text style={[styles.summary, isRTL && styles.rtlText]} numberOfLines={3}>
         {note.summary || note.original_content}
       </Text>
+
+      {/* Source URL Display */}
+      {note.source_url && (
+        <TouchableOpacity 
+          style={styles.sourceUrlContainer} 
+          onPress={handleSourceUrlPress}
+          activeOpacity={0.7}
+        >
+          <Globe size={14} color="#2563EB" strokeWidth={2} />
+          <Text style={[styles.sourceUrlText, isRTL && styles.rtlText]} numberOfLines={1}>
+            {note.source_url}
+          </Text>
+          <ExternalLink size={12} color="#2563EB" strokeWidth={2} />
+        </TouchableOpacity>
+      )}
 
       {note.tags && note.tags.length > 0 && (
         <View style={styles.tagsContainer}>
           {note.tags.slice(0, 3).map((tag, index) => (
             <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>{tag}</Text>
+              <Text style={[styles.tagText, isRTL && styles.rtlText]}>{tag}</Text>
             </View>
           ))}
           {note.tags.length > 3 && (
@@ -128,6 +162,26 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 20,
     marginBottom: 12,
+  },
+  rtlText: {
+    textAlign: I18nManager.isRTL ? 'right' : 'left',
+    writingDirection: I18nManager.isRTL ? 'rtl' : 'ltr',
+  },
+  sourceUrlContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 12,
+    gap: 6,
+  },
+  sourceUrlText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#2563EB',
   },
   tagsContainer: {
     flexDirection: 'row',
