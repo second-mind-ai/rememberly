@@ -750,7 +750,7 @@ Based on your requirements, I recommend implementing a combination of Redux Tool
 
 ### 1. Redux Toolkit for Global State
 
-``\`typescript
+\`\`\`typescript
 // store/index.ts
 import { configureStore } from '@reduxjs/toolkit'
 import { userApi } from './api/userApi'
@@ -764,13 +764,13 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(userApi.middleware),
 })
-```
+\`\`\`
 
 ### 2. RTK Query for Data Fetching
 
 RTK Query eliminates duplicate requests and provides automatic caching:
 
-```typescript
+\`\`\`typescript
 // api/userApi.ts
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react'
 
@@ -785,13 +785,13 @@ export const userApi = createApi({
     }),
   }),
 })
-```
+\`\`\`
 
 ### 3. Component-Level State with React Query Alternative
 
 For teams preferring React Query, it offers excellent caching and synchronization:
 
-```typescript
+\`\`\`typescript
 import { useQuery } from '@tanstack/react-query'
 
 function UserProfile({ userId }: { userId: string }) {
@@ -801,7 +801,7 @@ function UserProfile({ userId }: { userId: string }) {
     staleTime: 5 * 60 * 1000, // 5 minutes
   })
 }
-```
+\`\`\`
 
 ### Performance Optimization Tips
 
