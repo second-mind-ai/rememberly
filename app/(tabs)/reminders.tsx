@@ -12,6 +12,8 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { getCurrentUser } from '@/lib/auth';
 import { useReminderStore } from '@/lib/reminderStore';
 import { registerForPushNotificationsAsync, formatReminderTime } from '@/lib/notifications';
 import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2 } from 'lucide-react-native';
@@ -27,6 +29,7 @@ interface ReminderFormData {
 }
 
 export default function RemindersScreen() {
+  const router = useRouter();
   const { 
     reminders, 
     loading, 
@@ -43,6 +46,8 @@ export default function RemindersScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
   const isMounted = useRef(true);
   
   const [formData, setFormData] = useState<ReminderFormData>({
@@ -59,8 +64,33 @@ export default function RemindersScreen() {
   }, []);
 
   useEffect(() => {
-    initializeReminders();
+    checkAuthAndInitialize();
   }, []);
+
+  async function checkAuthAndInitialize() {
+    try {
+      setAuthLoading(true);
+      const { user, error } = await getCurrentUser();
+      
+      if (error || !user) {
+        console.log('User not authenticated, redirecting to login');
+        router.replace('/auth/login');
+        return;
+      }
+
+      if (isMounted.current) {
+        setIsAuthenticated(true);
+        await initializeReminders();
+      }
+    } catch (error) {
+      console.error('Authentication check failed:', error);
+      router.replace('/auth/login');
+    } finally {
+      if (isMounted.current) {
+        setAuthLoading(false);
+      }
+    }
+  }
 
   async function initializeReminders() {
     try {
@@ -226,6 +256,22 @@ export default function RemindersScreen() {
       newDateTime.setMinutes(selectedTime.getMinutes());
       setFormData(prev => ({ ...prev, dateTime: newDateTime }));
     }
+  }
+
+  // Show loading screen while checking authentication
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Don't render anything if not authenticated (will redirect)
+  if (!isAuthenticated) {
+    return null;
   }
 
   // Sort reminders by remind_at date
@@ -601,6 +647,16 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
   header: {
     backgroundColor: '#ffffff',

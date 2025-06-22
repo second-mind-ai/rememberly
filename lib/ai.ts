@@ -23,20 +23,26 @@ export async function summarizeContent(content: string, type: 'text' | 'url' | '
       }
     }
     
-    // Use real AI analysis if API key is available, otherwise fallback to enhanced local analysis
-    if (OPENAI_API_KEY && OPENAI_API_KEY.trim() !== '') {
-      const result = await analyzeWithGPT4(finalContent, type);
-      
-      // Ensure minimum processing time for better UX
-      const processingTime = Date.now() - startTime;
-      if (processingTime < 1500) {
-        await new Promise(resolve => setTimeout(resolve, 1500 - processingTime));
+    // Use real AI analysis if API key is available and valid, otherwise fallback to enhanced local analysis
+    if (OPENAI_API_KEY && OPENAI_API_KEY.trim() !== '' && OPENAI_API_KEY !== 'your_openai_api_key_here') {
+      try {
+        const result = await analyzeWithGPT4(finalContent, type);
+        
+        // Ensure minimum processing time for better UX
+        const processingTime = Date.now() - startTime;
+        if (processingTime < 1500) {
+          await new Promise(resolve => setTimeout(resolve, 1500 - processingTime));
+        }
+        
+        return result;
+      } catch (error) {
+        console.error('GPT-4 analysis failed, falling back to local analysis:', error);
+        // Fallback to local analysis on API error
+        return await performEnhancedLocalAnalysis(finalContent, type);
       }
-      
-      return result;
     } else {
       // Fallback to enhanced local analysis
-      console.log('OpenAI API key not found, using enhanced local analysis');
+      console.log('OpenAI API key not configured or invalid, using enhanced local analysis');
       return await performEnhancedLocalAnalysis(finalContent, type);
     }
   } catch (error) {
@@ -61,7 +67,7 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4',
+        model: 'gpt-4o-mini', // Use gpt-4o-mini instead of gpt-4 for better availability
         messages: [
           {
             role: 'system',
@@ -78,7 +84,9 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error('OpenAI API error response:', errorText);
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
