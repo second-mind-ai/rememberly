@@ -5,6 +5,15 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 // Maximum content length to prevent regex stack overflow
 const MAX_CONTENT_LENGTH = 10000;
 
+// Validate API key format
+function isValidApiKey(key: string | undefined): boolean {
+  if (!key || key.trim() === '' || key === 'your_openai_api_key_here') {
+    return false;
+  }
+  // OpenAI API keys start with 'sk-' and have a specific format
+  return key.startsWith('sk-') && key.length > 20;
+}
+
 export async function summarizeContent(content: string, type: 'text' | 'url' | 'file' | 'image' = 'text'): Promise<{
   title: string;
   summary: string;
@@ -27,7 +36,7 @@ export async function summarizeContent(content: string, type: 'text' | 'url' | '
     }
     
     // Use real AI analysis if API key is available and valid, otherwise fallback to enhanced local analysis
-    if (OPENAI_API_KEY && OPENAI_API_KEY.trim() !== '' && OPENAI_API_KEY !== 'your_openai_api_key_here') {
+    if (isValidApiKey(OPENAI_API_KEY)) {
       try {
         const result = await analyzeWithGPT4(finalContent, type);
         
@@ -63,6 +72,10 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
   try {
     const prompt = createAnalysisPrompt(content, type);
     
+    // Add timeout and better error handling
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
@@ -84,12 +97,25 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
         max_tokens: 800,
         temperature: 0.1,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI API error response:', errorText);
-      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+      console.error('OpenAI API error response:', response.status, errorText);
+      
+      // Handle specific error cases
+      if (response.status === 401) {
+        throw new Error('Invalid OpenAI API key. Please check your API key configuration.');
+      } else if (response.status === 429) {
+        throw new Error('OpenAI API rate limit exceeded. Please try again later.');
+      } else if (response.status === 403) {
+        throw new Error('OpenAI API access forbidden. Please check your API key permissions.');
+      } else {
+        throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+      }
     }
 
     const data = await response.json();
@@ -102,6 +128,18 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
     return parseAIResponse(aiResponse);
   } catch (error) {
     console.error('GPT-4 analysis error:', error);
+    
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        throw new Error('OpenAI API request timed out. Please check your internet connection.');
+      } else if (error.message.includes('Network request failed')) {
+        throw new Error('Network connection failed. Please check your internet connection and try again.');
+      } else if (error.message.includes('Failed to fetch')) {
+        throw new Error('Unable to connect to OpenAI API. Please check your internet connection.');
+      }
+    }
+    
     throw error;
   }
 }
