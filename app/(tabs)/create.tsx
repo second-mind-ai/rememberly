@@ -16,7 +16,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useNotesStore } from '@/lib/store';
 import { summarizeContent, fetchUrlContent } from '@/lib/ai';
-import { FileText, Link2, Image as ImageIcon, Camera, Upload, Brain, Sparkles, Check, X, Zap, Star, Paperclip, Search, Mic } from 'lucide-react-native';
+import { FileText, Link2, Image as ImageIcon, Camera, Upload, Brain, Sparkles, Check, X, Zap, Star, Paperclip, Search, Mic, FolderOpen } from 'lucide-react-native';
 
 type NoteType = 'text' | 'url' | 'file' | 'image';
 
@@ -135,6 +135,7 @@ export default function CreateScreen() {
     setShowAiPreview(false);
     setCustomTitle('');
     setCustomSummary('');
+    setActiveTab('text');
   }
 
   function handleDiscardPreview() {
@@ -147,24 +148,6 @@ export default function CreateScreen() {
   async function handleImagePicker() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 1,
-    });
-
-    if (!result.canceled && result.assets[0]) {
-      setContent(result.assets[0].uri);
-      setActiveTab('image');
-    }
-  }
-
-  async function handleCameraPicker() {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Camera access is required to take photos');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
       quality: 1,
     });
@@ -231,7 +214,15 @@ export default function CreateScreen() {
                 onPress={handleDocumentPicker}
                 activeOpacity={0.7}
               >
-                <Paperclip size={20} color="#6B7280" strokeWidth={2} />
+                <FolderOpen size={20} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={handleImagePicker}
+                activeOpacity={0.7}
+              >
+                <ImageIcon size={20} color="#6B7280" strokeWidth={2} />
               </TouchableOpacity>
               
               <TouchableOpacity 
@@ -240,14 +231,6 @@ export default function CreateScreen() {
                 activeOpacity={0.7}
               >
                 <Search size={20} color="#6B7280" strokeWidth={2} />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => {/* Voice functionality */}}
-                activeOpacity={0.7}
-              >
-                <Mic size={20} color="#6B7280" strokeWidth={2} />
               </TouchableOpacity>
             </View>
           </View>
@@ -307,18 +290,6 @@ export default function CreateScreen() {
               <Text style={styles.selectedFile}>
                 Selected: {content.split('/').pop() || 'No file selected'}
               </Text>
-              {activeTab === 'image' && (
-                <View style={styles.imageActions}>
-                  <TouchableOpacity style={styles.imageActionButton} onPress={handleCameraPicker}>
-                    <Camera size={16} color="#2563EB" strokeWidth={2} />
-                    <Text style={styles.imageActionText}>Take Photo</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.imageActionButton} onPress={handleImagePicker}>
-                    <ImageIcon size={16} color="#2563EB" strokeWidth={2} />
-                    <Text style={styles.imageActionText}>Choose Photo</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
             </View>
           )}
         </View>
@@ -584,29 +555,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Regular',
     color: '#059669',
-    marginBottom: 12,
-  },
-  imageActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  imageActionButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: '#EFF6FF',
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
-  },
-  imageActionText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#2563EB',
   },
   analyzeButton: {
     backgroundColor: '#7C3AED',
