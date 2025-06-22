@@ -12,7 +12,7 @@ import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNotesStore } from '@/lib/store';
 import { getCurrentUser, signOut } from '@/lib/auth';
-import { Brain, Plus, FileText, Link2, Image, LogOut, Sparkles } from 'lucide-react-native';
+import { Brain, Plus, FileText, Link2, Image, LogOut } from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
 
 export default function HomeScreen() {
@@ -96,7 +96,7 @@ export default function HomeScreen() {
                 <FileText size={24} color="#ffffff" strokeWidth={2} />
               </LinearGradient>
               <Text style={styles.actionTitle}>Text Note</Text>
-              <Text style={styles.actionSubtitle}>Quick thoughts</Text>
+              <Text style={styles.actionSubtitle}>AI-powered analysis</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -110,7 +110,7 @@ export default function HomeScreen() {
                 <Link2 size={24} color="#ffffff" strokeWidth={2} />
               </LinearGradient>
               <Text style={styles.actionTitle}>Save URL</Text>
-              <Text style={styles.actionSubtitle}>Web articles</Text>
+              <Text style={styles.actionSubtitle}>Smart summaries</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -124,38 +124,9 @@ export default function HomeScreen() {
                 <Image size={24} color="#ffffff" strokeWidth={2} />
               </LinearGradient>
               <Text style={styles.actionTitle}>Upload File</Text>
-              <Text style={styles.actionSubtitle}>Images & docs</Text>
+              <Text style={styles.actionSubtitle}>Auto-organized</Text>
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* AI Analyzer Feature */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>AI Content Analyzer</Text>
-          <TouchableOpacity
-            style={styles.analyzerCard}
-            onPress={() => router.push('/analyze')}
-          >
-            <LinearGradient
-              colors={['#7C3AED', '#8B5CF6', '#A78BFA']}
-              style={styles.analyzerGradient}
-            >
-              <View style={styles.analyzerContent}>
-                <View style={styles.analyzerLeft}>
-                  <View style={styles.analyzerIconContainer}>
-                    <Sparkles size={28} color="#ffffff" strokeWidth={2} />
-                  </View>
-                  <View style={styles.analyzerText}>
-                    <Text style={styles.analyzerTitle}>Smart Content Analysis</Text>
-                    <Text style={styles.analyzerSubtitle}>
-                      Let AI analyze and summarize any content for you
-                    </Text>
-                  </View>
-                </View>
-                <Brain size={32} color="rgba(255, 255, 255, 0.8)" strokeWidth={2} />
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
         </View>
 
         {/* Recent Notes */}
@@ -184,7 +155,7 @@ export default function HomeScreen() {
               <Brain size={48} color="#9CA3AF" strokeWidth={2} />
               <Text style={styles.emptyTitle}>No notes yet</Text>
               <Text style={styles.emptySubtitle}>
-                Create your first note to get started with Rememberly
+                Create your first note and let AI organize it perfectly
               </Text>
               <TouchableOpacity
                 style={styles.createButton}
@@ -285,52 +256,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     color: '#6B7280',
     textAlign: 'center',
-  },
-  analyzerCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  analyzerGradient: {
-    padding: 20,
-  },
-  analyzerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  analyzerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 16,
-  },
-  analyzerIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  analyzerText: {
-    flex: 1,
-  },
-  analyzerTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: '#ffffff',
-    marginBottom: 4,
-  },
-  analyzerSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: 'rgba(255, 255, 255, 0.9)',
-    lineHeight: 20,
   },
   notesContainer: {
     gap: 12,

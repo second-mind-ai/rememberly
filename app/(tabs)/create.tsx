@@ -15,19 +15,72 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useNotesStore } from '@/lib/store';
 import { summarizeContent, fetchUrlContent } from '@/lib/ai';
-import { FileText, Link2, Image as ImageIcon, Camera, Upload } from 'lucide-react-native';
+import { FileText, Link2, Image as ImageIcon, Camera, Upload, Brain, Sparkles, Check, X } from 'lucide-react-native';
 
 type NoteType = 'text' | 'url' | 'file' | 'image';
+
+interface AIPreview {
+  title: string;
+  summary: string;
+  tags: string[];
+}
 
 export default function CreateScreen() {
   const [activeTab, setActiveTab] = useState<NoteType>('text');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiPreview, setAiPreview] = useState<AIPreview | null>(null);
+  const [showAiPreview, setShowAiPreview] = useState(false);
+  const [customTitle, setCustomTitle] = useState('');
+  const [customSummary, setCustomSummary] = useState('');
   const { createNote } = useNotesStore();
+
+  async function handleAnalyzeContent() {
+    if (!content.trim()) {
+      Alert.alert('Error', 'Please enter some content to analyze');
+      return;
+    }
+
+    setAnalyzing(true);
+    try {
+      let finalContent = content;
+
+      // If it's a URL, fetch the content
+      if (activeTab === 'url') {
+        try {
+          finalContent = await fetchUrlContent(content);
+        } catch (error) {
+          Alert.alert('Error', 'Could not fetch URL content');
+          setAnalyzing(false);
+          return;
+        }
+      }
+
+      // Get AI analysis
+      const aiResult = await summarizeContent(finalContent, activeTab);
+      
+      setAiPreview(aiResult);
+      setCustomTitle(aiResult.title);
+      setCustomSummary(aiResult.summary);
+      setShowAiPreview(true);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to analyze content');
+      console.error('Analysis error:', error);
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   async function handleCreateNote() {
     if (!content.trim()) {
       Alert.alert('Error', 'Please enter some content');
+      return;
+    }
+
+    // If no AI preview exists, analyze first
+    if (!aiPreview) {
+      await handleAnalyzeContent();
       return;
     }
 
@@ -46,16 +99,13 @@ export default function CreateScreen() {
         }
       }
 
-      // Get AI summary
-      const aiResult = await summarizeContent(finalContent, activeTab);
-
-      // Create note
+      // Create note with AI-generated or custom data
       const noteData = {
-        title: aiResult.title,
+        title: customTitle || aiPreview.title,
         original_content: finalContent,
-        summary: aiResult.summary,
+        summary: customSummary || aiPreview.summary,
         type: activeTab,
-        tags: aiResult.tags,
+        tags: aiPreview.tags,
         source_url: activeTab === 'url' ? content : null,
         file_url: activeTab === 'file' || activeTab === 'image' ? content : null,
       };
@@ -66,7 +116,7 @@ export default function CreateScreen() {
         Alert.alert('Success', 'Note created successfully!', [
           { text: 'OK', onPress: () => router.push('/(tabs)') }
         ]);
-        setContent('');
+        handleClearAll();
       } else {
         Alert.alert('Error', 'Failed to create note');
       }
@@ -76,6 +126,21 @@ export default function CreateScreen() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleClearAll() {
+    setContent('');
+    setAiPreview(null);
+    setShowAiPreview(false);
+    setCustomTitle('');
+    setCustomSummary('');
+  }
+
+  function handleDiscardPreview() {
+    setAiPreview(null);
+    setShowAiPreview(false);
+    setCustomTitle('');
+    setCustomSummary('');
   }
 
   async function handleImagePicker() {
@@ -132,14 +197,17 @@ export default function CreateScreen() {
     { id: 'image', label: 'Image', icon: ImageIcon },
   ];
 
+  const canAnalyze = content.trim() && !analyzing && !loading;
+  const canCreate = content.trim() && aiPreview && !analyzing && !loading;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Create Note</Text>
-        <Text style={styles.subtitle}>Capture and let AI organize your thoughts</Text>
+        <Text style={styles.subtitle}>AI will automatically analyze and organize your content</Text>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.tabs}>
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -172,6 +240,7 @@ export default function CreateScreen() {
                 value={content}
                 onChangeText={setContent}
                 placeholder="Type or paste your content here..."
+                placeholderTextColor="#9CA3AF"
                 multiline
                 textAlignVertical="top"
               />
@@ -226,22 +295,109 @@ export default function CreateScreen() {
           )}
         </View>
 
+        {/* AI Analysis Button */}
+        {!showAiPreview && (
+          <TouchableOpacity
+            style={[styles.analyzeButton, !canAnalyze && styles.analyzeButtonDisabled]}
+            onPress={handleAnalyzeContent}
+            disabled={!canAnalyze}
+          >
+            {analyzing ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <>
+                <Brain size={20} color="#ffffff" strokeWidth={2} />
+                <Text style={styles.analyzeButtonText}>Analyze with AI</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {analyzing && (
+          <View style={styles.loadingSection}>
+            <Sparkles size={32} color="#7C3AED" strokeWidth={2} />
+            <Text style={styles.loadingText}>AI is analyzing your content...</Text>
+            <Text style={styles.loadingSubtext}>Generating title, summary, and tags</Text>
+          </View>
+        )}
+
+        {/* AI Preview Section */}
+        {showAiPreview && aiPreview && (
+          <View style={styles.previewSection}>
+            <View style={styles.previewHeader}>
+              <View style={styles.previewHeaderLeft}>
+                <Sparkles size={20} color="#7C3AED" strokeWidth={2} />
+                <Text style={styles.previewTitle}>AI Analysis</Text>
+              </View>
+              <TouchableOpacity onPress={handleDiscardPreview} style={styles.discardButton}>
+                <X size={16} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.previewContent}>
+              <View style={styles.previewField}>
+                <Text style={styles.previewFieldLabel}>Generated Title</Text>
+                <TextInput
+                  style={styles.previewInput}
+                  value={customTitle}
+                  onChangeText={setCustomTitle}
+                  placeholder="Edit title..."
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+
+              <View style={styles.previewField}>
+                <Text style={styles.previewFieldLabel}>Generated Summary</Text>
+                <TextInput
+                  style={[styles.previewInput, styles.previewTextArea]}
+                  value={customSummary}
+                  onChangeText={setCustomSummary}
+                  placeholder="Edit summary..."
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {aiPreview.tags && aiPreview.tags.length > 0 && (
+                <View style={styles.previewField}>
+                  <Text style={styles.previewFieldLabel}>Generated Tags</Text>
+                  <View style={styles.tagsContainer}>
+                    {aiPreview.tags.map((tag, index) => (
+                      <View key={index} style={styles.tag}>
+                        <Text style={styles.tagText}>{tag}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Create Note Button */}
         <TouchableOpacity
-          style={[styles.createButton, (!content.trim() || loading) && styles.createButtonDisabled]}
+          style={[styles.createButton, !canCreate && styles.createButtonDisabled]}
           onPress={handleCreateNote}
-          disabled={!content.trim() || loading}
+          disabled={!canCreate}
         >
           {loading ? (
             <ActivityIndicator color="#ffffff" />
           ) : (
-            <Text style={styles.createButtonText}>Create Note</Text>
+            <>
+              <Check size={20} color="#ffffff" strokeWidth={2} />
+              <Text style={styles.createButtonText}>
+                {aiPreview ? 'Create Note' : 'Analyze & Create Note'}
+              </Text>
+            </>
           )}
         </TouchableOpacity>
 
-        {loading && (
-          <View style={styles.loadingSection}>
-            <Text style={styles.loadingText}>AI is processing your content...</Text>
-          </View>
+        {content && (
+          <TouchableOpacity style={styles.clearButton} onPress={handleClearAll}>
+            <Text style={styles.clearButtonText}>Clear All</Text>
+          </TouchableOpacity>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -303,7 +459,7 @@ const styles = StyleSheet.create({
     color: '#2563EB',
   },
   inputSection: {
-    marginBottom: 32,
+    marginBottom: 24,
   },
   inputLabel: {
     fontSize: 16,
@@ -380,12 +536,119 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
   },
-  createButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
-    paddingVertical: 16,
+  analyzeButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#7C3AED',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 24,
+  },
+  analyzeButtonDisabled: {
+    opacity: 0.6,
+  },
+  analyzeButtonText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#ffffff',
+  },
+  loadingSection: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 12,
+    marginBottom: 24,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#7C3AED',
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+  },
+  previewSection: {
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  previewHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  previewTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+  },
+  discardButton: {
+    padding: 4,
+  },
+  previewContent: {
+    gap: 16,
+  },
+  previewField: {
+    gap: 8,
+  },
+  previewFieldLabel: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#374151',
+  },
+  previewInput: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  previewTextArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+  },
+  tagText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#7C3AED',
+  },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#059669',
+    paddingVertical: 16,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 16,
   },
   createButtonDisabled: {
     opacity: 0.6,
@@ -395,13 +658,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: '#ffffff',
   },
-  loadingSection: {
+  clearButton: {
     alignItems: 'center',
-    paddingTop: 16,
+    paddingVertical: 12,
   },
-  loadingText: {
+  clearButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: 'Inter-Medium',
     color: '#6B7280',
   },
 });
