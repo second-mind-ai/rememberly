@@ -72,7 +72,10 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
         messages: [
           {
             role: 'system',
-            content: `You are an expert multilingual content analyzer that creates perfect titles, summaries, and tags for notes in any language. You excel at understanding context, extracting key information, and creating human-readable content that helps users organize and remember their information effectively. Always respond in the same language as the input content.`
+            content: `You are an expert multilingual content analyzer. You MUST respond with ONLY a valid JSON object in this exact format:
+{"title": "string", "summary": "string", "tags": ["string1", "string2"]}
+
+Do not include any markdown formatting, explanations, or additional text. Only return the JSON object.`
           },
           {
             role: 'user',
@@ -80,7 +83,7 @@ async function analyzeWithGPT4(content: string, type: string): Promise<{
           }
         ],
         max_tokens: 500,
-        temperature: 0.3,
+        temperature: 0.1, // Lower temperature for more consistent output
       }),
     });
 
@@ -147,26 +150,20 @@ function createMultilingualAnalysisPrompt(content: string, type: string, languag
 
   const instruction = languageInstructions[language] || languageInstructions['en'];
 
-  return `Analyze this ${type} content and provide a JSON response with exactly this structure:
+  return `Analyze this ${type} content and respond with ONLY a JSON object in this exact format:
 
-{
-  "title": "A smart, engaging title (max 8 words)",
-  "summary": "A clear, concise summary (2-4 sentences) that captures the main points",
-  "tags": ["array", "of", "relevant", "tags", "max", "10", "tags"]
-}
+{"title": "A smart, engaging title (max 8 words)", "summary": "A clear, concise summary (2-4 sentences)", "tags": ["array", "of", "relevant", "tags"]}
 
-IMPORTANT: ${instruction}
+CRITICAL REQUIREMENTS:
+- ${instruction}
+- Return ONLY the JSON object, no markdown, no explanations, no additional text
+- Title: max 8 words, descriptive and engaging
+- Summary: 2-4 sentences, conversational and insightful
+- Tags: max 10 relevant keywords/topics
+- Ensure valid JSON syntax
 
 Content to analyze:
-${contentPreview}
-
-Requirements:
-- Title should be descriptive, engaging, and human-readable in the same language as the content
-- Summary should be conversational and highlight key insights in the same language as the content
-- Tags should include topics, categories, and relevant keywords in the same language as the content
-- Focus on making this useful for someone organizing their notes
-- Ensure the response is valid JSON only
-- Maintain the original language throughout all fields`;
+${contentPreview}`;
 }
 
 function parseAIResponse(response: string): {
@@ -176,24 +173,74 @@ function parseAIResponse(response: string): {
 } {
   try {
     // Clean the response to ensure it's valid JSON
-    const cleanResponse = response.trim();
+    let cleanResponse = response.trim();
+    
+    // Remove markdown code blocks if present
+    cleanResponse = cleanResponse.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    
+    // Remove any leading/trailing text that's not part of JSON
     const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
     
     if (!jsonMatch) {
+      console.error('No JSON object found in response:', response);
       throw new Error('No JSON found in response');
     }
     
-    const parsed = JSON.parse(jsonMatch[0]);
+    const jsonString = jsonMatch[0];
     
-    // Validate and clean the response
+    // Attempt to parse the JSON
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonString);
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
+      console.error('Attempted to parse:', jsonString);
+      
+      // Try to fix common JSON issues
+      let fixedJson = jsonString
+        .replace(/,\s*}/g, '}') // Remove trailing commas
+        .replace(/,\s*]/g, ']') // Remove trailing commas in arrays
+        .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // Add quotes to unquoted keys
+        .replace(/:\s*'([^']*)'/g, ': "$1"') // Replace single quotes with double quotes
+        .replace(/\n/g, ' ') // Remove newlines
+        .replace(/\t/g, ' ') // Remove tabs
+        .replace(/\s+/g, ' '); // Normalize whitespace
+      
+      try {
+        parsed = JSON.parse(fixedJson);
+        console.log('Successfully parsed after fixing JSON');
+      } catch (secondParseError) {
+        console.error('Failed to parse even after fixing:', secondParseError);
+        throw new Error('Invalid AI response format');
+      }
+    }
+    
+    // Validate and clean the response structure
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Response is not a valid object');
+    }
+    
+    // Ensure required fields exist and are valid
+    const title = typeof parsed.title === 'string' ? parsed.title.trim() : 'Untitled Note';
+    const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : 'No summary available';
+    const tags = Array.isArray(parsed.tags) ? parsed.tags.filter(tag => typeof tag === 'string' && tag.trim().length > 0) : ['note'];
+    
+    // Validate lengths and clean up
     return {
-      title: (parsed.title || 'Untitled Note').substring(0, 100),
-      summary: (parsed.summary || 'No summary available').substring(0, 500),
-      tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 10) : ['note']
+      title: title.length > 0 ? title.substring(0, 100) : 'Untitled Note',
+      summary: summary.length > 0 ? summary.substring(0, 500) : 'No summary available',
+      tags: tags.length > 0 ? tags.slice(0, 10) : ['note']
     };
   } catch (error) {
     console.error('Error parsing AI response:', error);
-    throw new Error('Invalid AI response format');
+    console.error('Original response:', response);
+    
+    // Return a fallback response instead of throwing
+    return {
+      title: 'AI Analysis Note',
+      summary: 'Content analyzed but response formatting failed. Please try again.',
+      tags: ['note', 'content', 'analysis']
+    };
   }
 }
 
