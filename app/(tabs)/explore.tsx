@@ -8,6 +8,7 @@ import {
   RefreshControl,
   TextInput,
   Animated,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotesStore } from '@/lib/store';
@@ -16,6 +17,8 @@ import { NoteCard } from '@/components/NoteCard';
 
 type SortOption = 'newest' | 'oldest' | 'title' | 'type';
 type ViewMode = 'grid' | 'list';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 export default function ExploreScreen() {
   const { notes, loading, fetchNotes, error } = useNotesStore();
@@ -26,6 +29,7 @@ export default function ExploreScreen() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [filterAnimation] = useState(new Animated.Value(0));
+  const [filterHeight, setFilterHeight] = useState(0);
   const isMounted = useRef(true);
 
   useEffect(() => {
@@ -94,15 +98,22 @@ export default function ExploreScreen() {
 
   const activeFiltersCount = (selectedType ? 1 : 0) + (sortBy !== 'newest' ? 1 : 0);
 
-  const filterHeight = filterAnimation.interpolate({
+  const animatedHeight = filterAnimation.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 120],
+    outputRange: [0, filterHeight || 160], // Dynamic height based on content
   });
 
   const filterOpacity = filterAnimation.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
   });
+
+  const handleFilterLayout = (event: any) => {
+    const { height } = event.nativeEvent.layout;
+    if (height > 0 && height !== filterHeight) {
+      setFilterHeight(height);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -167,64 +178,63 @@ export default function ExploreScreen() {
         style={[
           styles.filtersSection,
           {
-            height: filterHeight,
+            height: animatedHeight,
             opacity: filterOpacity,
           }
         ]}
       >
-        <View style={styles.filtersContent}>
+        <View 
+          style={styles.filtersContent}
+          onLayout={handleFilterLayout}
+        >
           {/* Type Filters */}
           <View style={styles.filterGroup}>
             <Text style={styles.filterGroupTitle}>Type</Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.filterChipsContainer}
-            >
-              <TouchableOpacity
-                style={[styles.filterChip, selectedType === null && styles.filterChipActive]}
-                onPress={() => setSelectedType(null)}
-              >
-                <Text style={[styles.filterChipText, selectedType === null && styles.filterChipTextActive]}>
-                  All
-                </Text>
-              </TouchableOpacity>
-              
-              {noteTypes.map((type) => (
+            <View style={styles.filterChipsContainer}>
+              <View style={styles.filterChipsRow}>
                 <TouchableOpacity
-                  key={type}
-                  style={[styles.filterChip, selectedType === type && styles.filterChipActive]}
-                  onPress={() => setSelectedType(selectedType === type ? null : type)}
+                  style={[styles.filterChip, selectedType === null && styles.filterChipActive]}
+                  onPress={() => setSelectedType(null)}
                 >
-                  <Text style={[styles.filterChipText, selectedType === type && styles.filterChipTextActive]}>
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  <Text style={[styles.filterChipText, selectedType === null && styles.filterChipTextActive]}>
+                    All
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+                
+                {noteTypes.map((type) => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[styles.filterChip, selectedType === type && styles.filterChipActive]}
+                    onPress={() => setSelectedType(selectedType === type ? null : type)}
+                  >
+                    <Text style={[styles.filterChipText, selectedType === type && styles.filterChipTextActive]}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           </View>
 
           {/* Sort Options */}
           <View style={styles.filterGroup}>
             <Text style={styles.filterGroupTitle}>Sort by</Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.filterChipsContainer}
-            >
-              {sortOptions.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[styles.filterChip, sortBy === option.value && styles.filterChipActive]}
-                  onPress={() => setSortBy(option.value)}
-                >
-                  <ArrowUpDown size={14} color={sortBy === option.value ? "#ffffff" : "#6B7280"} strokeWidth={2} />
-                  <Text style={[styles.filterChipText, sortBy === option.value && styles.filterChipTextActive]}>
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            <View style={styles.filterChipsContainer}>
+              <View style={styles.filterChipsRow}>
+                {sortOptions.map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[styles.filterChip, sortBy === option.value && styles.filterChipActive]}
+                    onPress={() => setSortBy(option.value)}
+                  >
+                    <ArrowUpDown size={14} color={sortBy === option.value ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+                    <Text style={[styles.filterChipText, sortBy === option.value && styles.filterChipTextActive]}>
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
           </View>
         </View>
       </Animated.View>
@@ -387,12 +397,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   filtersContent: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 20,
     paddingVertical: 16,
-    gap: 16,
+    gap: 20,
   },
   filterGroup: {
-    gap: 8,
+    gap: 12,
   },
   filterGroupTitle: {
     fontSize: 14,
@@ -400,19 +414,27 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
   filterChipsContainer: {
+    width: '100%',
+  },
+  filterChipsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'center',
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 16,
     backgroundColor: '#ffffff',
-    marginRight: 8,
     gap: 4,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    minHeight: 36,
+    // Ensure chips don't get too small on smaller screens
+    minWidth: screenWidth < 400 ? 70 : 80,
   },
   filterChipActive: {
     backgroundColor: '#2563EB',
@@ -422,6 +444,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter-Medium',
     color: '#6B7280',
+    textAlign: 'center',
+    flexShrink: 1,
   },
   filterChipTextActive: {
     color: '#ffffff',
@@ -454,7 +478,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   gridItem: {
-    width: '48%',
+    width: screenWidth < 600 ? '48%' : '31%', // Responsive grid columns
   },
   emptyState: {
     alignItems: 'center',
