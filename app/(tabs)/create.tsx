@@ -276,7 +276,9 @@ export default function CreateScreen() {
                 <Text style={styles.uploadText}>Choose File</Text>
               </TouchableOpacity>
               {content && (
-                <Text style={styles.selectedFile}>Selected: {content.split('/').pop() || 'No file selected'}</Text>
+                <Text style={styles.selectedFile}>
+                  Selected: {content.split('/').pop() || 'File selected'}
+                </Text>
               )}
             </View>
           )}
@@ -295,7 +297,9 @@ export default function CreateScreen() {
                 </TouchableOpacity>
               </View>
               {content && (
-                <Text style={styles.selectedFile}>Selected: {content.split('/').pop() || 'No file selected'}</Text>
+                <Text style={styles.selectedFile}>
+                  Selected: {content.split('/').pop() || 'Image selected'}
+                </Text>
               )}
             </View>
           )}
