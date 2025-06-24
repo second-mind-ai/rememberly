@@ -1,7 +1,23 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Linking, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Linking,
+  Alert,
+  Image,
+} from 'react-native';
 import { router } from 'expo-router';
-import { FileText, Link2, Image as ImageIcon, Calendar, ExternalLink } from 'lucide-react-native';
+import {
+  FileText,
+  Link2,
+  Image as ImageIcon,
+  Calendar,
+  ExternalLink,
+  File,
+  Download,
+} from 'lucide-react-native';
 import { Database } from '@/lib/supabase';
 
 type Note = Database['public']['Tables']['notes']['Row'];
@@ -16,10 +32,24 @@ export function NoteCard({ note }: NoteCardProps) {
       case 'url':
         return <Link2 size={16} color="#059669" strokeWidth={2} />;
       case 'file':
+        return <File size={16} color="#D97706" strokeWidth={2} />;
       case 'image':
-        return <ImageIcon size={16} color="#D97706" strokeWidth={2} />;
+        return <ImageIcon size={16} color="#DC2626" strokeWidth={2} />;
       default:
         return <FileText size={16} color="#2563EB" strokeWidth={2} />;
+    }
+  };
+
+  const getTypeColor = () => {
+    switch (note.type) {
+      case 'url':
+        return '#F0FDF4';
+      case 'file':
+        return '#FEF3C7';
+      case 'image':
+        return '#FEF2F2';
+      default:
+        return '#EFF6FF';
     }
   };
 
@@ -31,16 +61,16 @@ export function NoteCard({ note }: NoteCardProps) {
 
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
     });
   };
 
   const handleOpenSourceLink = async (e: any) => {
     e.stopPropagation(); // Prevent card navigation when clicking link
-    
+
     if (!note.source_url) return;
 
     try {
@@ -66,7 +96,7 @@ export function NoteCard({ note }: NoteCardProps) {
 
   const handleTextLinkPress = async (url: string, e: any) => {
     e.stopPropagation(); // Prevent card navigation
-    
+
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
@@ -81,15 +111,19 @@ export function NoteCard({ note }: NoteCardProps) {
 
   const renderTextWithLinks = (text: string) => {
     const links = extractLinksFromText(text);
-    
+
     if (links.length === 0) {
-      return <Text style={styles.summary} numberOfLines={3}>{text}</Text>;
+      return (
+        <Text style={styles.summary} numberOfLines={3}>
+          {text}
+        </Text>
+      );
     }
 
     let parts = [text];
-    links.forEach(link => {
+    links.forEach((link) => {
       const newParts: any[] = [];
-      parts.forEach(part => {
+      parts.forEach((part) => {
         if (typeof part === 'string') {
           const splitParts = part.split(link);
           for (let i = 0; i < splitParts.length; i++) {
@@ -120,12 +154,54 @@ export function NoteCard({ note }: NoteCardProps) {
     return (
       <View style={styles.textWithLinks}>
         <Text style={styles.summary} numberOfLines={3}>
-          {parts.map((part, index) => 
-            typeof part === 'string' ? part : part
-          )}
+          {parts.map((part, index) => (typeof part === 'string' ? part : part))}
         </Text>
       </View>
     );
+  };
+
+  const renderFilePreview = () => {
+    if (!note.file_url) return null;
+
+    if (note.type === 'image') {
+      return (
+        <View style={styles.imagePreview}>
+          <Image
+            source={{ uri: note.file_url }}
+            style={styles.previewImage}
+            onError={() => {
+              // Handle image loading error - could show placeholder
+              console.log('Failed to load image:', note.file_url);
+            }}
+          />
+          <View style={styles.imageOverlay}>
+            <ImageIcon size={16} color="#ffffff" strokeWidth={2} />
+            <Text style={styles.imageOverlayText}>Tap to view</Text>
+          </View>
+        </View>
+      );
+    }
+
+    if (note.type === 'file') {
+      // Extract filename from file_url or use title
+      const fileName = note.file_url.split('/').pop() || note.title;
+      return (
+        <View style={styles.filePreview}>
+          <File size={24} color="#D97706" strokeWidth={1.5} />
+          <View style={styles.fileInfo}>
+            <Text style={styles.fileName} numberOfLines={1}>
+              {fileName}
+            </Text>
+            <Text style={styles.fileType}>
+              {note.type.toUpperCase()} • Tap to open
+            </Text>
+          </View>
+          <Download size={16} color="#6B7280" strokeWidth={2} />
+        </View>
+      );
+    }
+
+    return null;
   };
 
   // Check if content has links
@@ -140,7 +216,9 @@ export function NoteCard({ note }: NoteCardProps) {
       activeOpacity={0.7}
     >
       <View style={styles.header}>
-        <View style={styles.typeContainer}>
+        <View
+          style={[styles.typeContainer, { backgroundColor: getTypeColor() }]}
+        >
           {getTypeIcon()}
         </View>
         <View style={styles.headerRight}>
@@ -164,12 +242,15 @@ export function NoteCard({ note }: NoteCardProps) {
         {note.title || 'Untitled Note'}
       </Text>
 
+      {/* Render file preview if available */}
+      {renderFilePreview()}
+
       {/* Render summary with clickable links */}
       {renderTextWithLinks(note.summary || note.original_content)}
 
       {/* Source URL section */}
       {note.source_url && (
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.sourceLink}
           onPress={handleOpenSourceLink}
           activeOpacity={0.7}
@@ -188,22 +269,25 @@ export function NoteCard({ note }: NoteCardProps) {
           <View style={styles.additionalLinksHeader}>
             <Link2 size={12} color="#6B7280" strokeWidth={2} />
             <Text style={styles.additionalLinksTitle}>
-              {contentLinks.length + summaryLinks.length} link{(contentLinks.length + summaryLinks.length) !== 1 ? 's' : ''} found
+              {contentLinks.length + summaryLinks.length} link
+              {contentLinks.length + summaryLinks.length !== 1 ? 's' : ''} found
             </Text>
           </View>
-          {[...new Set([...contentLinks, ...summaryLinks])].slice(0, 2).map((link, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.additionalLink}
-              onPress={(e) => handleTextLinkPress(link, e)}
-              activeOpacity={0.7}
-            >
-              <ExternalLink size={10} color="#6B7280" strokeWidth={2} />
-              <Text style={styles.additionalLinkText} numberOfLines={1}>
-                {link.replace(/^https?:\/\//, '').replace(/^www\./, '')}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {[...new Set([...contentLinks, ...summaryLinks])]
+            .slice(0, 2)
+            .map((link, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.additionalLink}
+                onPress={(e) => handleTextLinkPress(link, e)}
+                activeOpacity={0.7}
+              >
+                <ExternalLink size={10} color="#6B7280" strokeWidth={2} />
+                <Text style={styles.additionalLinkText} numberOfLines={1}>
+                  {link.replace(/^https?:\/\//, '').replace(/^www\./, '')}
+                </Text>
+              </TouchableOpacity>
+            ))}
         </View>
       )}
 
@@ -215,7 +299,9 @@ export function NoteCard({ note }: NoteCardProps) {
             </View>
           ))}
           {note.tags.length > 3 && (
-            <Text style={styles.moreTagsText}>+{note.tags.length - 3} more</Text>
+            <Text style={styles.moreTagsText}>
+              +{note.tags.length - 3} more
+            </Text>
           )}
         </View>
       )}
@@ -278,6 +364,61 @@ const styles = StyleSheet.create({
     color: '#111827',
     lineHeight: 22,
     marginBottom: 8,
+  },
+  imagePreview: {
+    borderRadius: 8,
+    marginBottom: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#F3F4F6',
+  },
+  previewImage: {
+    width: '100%',
+    height: 120,
+    backgroundColor: '#F3F4F6',
+    resizeMode: 'cover',
+  },
+  imageOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 6,
+  },
+  imageOverlayText: {
+    fontSize: 12,
+    fontFamily: 'Inter-Medium',
+    color: '#ffffff',
+  },
+  filePreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  fileInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  fileName: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#92400E',
+    marginBottom: 2,
+  },
+  fileType: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#B45309',
   },
   summary: {
     fontSize: 14,

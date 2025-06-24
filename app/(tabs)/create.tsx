@@ -8,14 +8,30 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { useNotesStore } from '@/lib/store';
 import { summarizeContent, fetchUrlContent } from '@/lib/ai';
-import { FileText, Link2, Image as ImageIcon, Camera, Upload, Brain, Sparkles, Check, X, Zap, Star } from 'lucide-react-native';
+import {
+  FileText,
+  Link2,
+  Image as ImageIcon,
+  Camera,
+  Upload,
+  Brain,
+  Sparkles,
+  Check,
+  X,
+  Zap,
+  Star,
+  AlertCircle,
+} from 'lucide-react-native';
 
 type NoteType = 'text' | 'url' | 'file' | 'image';
 
@@ -24,6 +40,16 @@ interface AIPreview {
   summary: string;
   tags: string[];
 }
+
+interface FileInfo {
+  uri: string;
+  name: string;
+  size?: number;
+  type?: string;
+  mimeType?: string;
+}
+
+const { width } = Dimensions.get('window');
 
 export default function CreateScreen() {
   const [activeTab, setActiveTab] = useState<NoteType>('text');
@@ -34,11 +60,67 @@ export default function CreateScreen() {
   const [showAiPreview, setShowAiPreview] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
   const [customSummary, setCustomSummary] = useState('');
+  const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
   const { createNote } = useNotesStore();
 
+  function handleContentChange(text: string) {
+    setContent(text);
+    // If user is typing, switch to text mode
+    if (text.trim() && activeTab !== 'text' && activeTab !== 'url') {
+      setActiveTab('text');
+    }
+    // Clear AI preview when content changes
+    if (aiPreview) {
+      setAiPreview(null);
+      setShowAiPreview(false);
+    }
+  }
+
+  async function extractFileContent(
+    fileUri: string,
+    fileName: string
+  ): Promise<string> {
+    try {
+      // For images, return a description that can be analyzed
+      if (activeTab === 'image') {
+        return `Image file: ${fileName}\nThis is an image that has been uploaded to the note. The image can be viewed in the note details.`;
+      }
+
+      // For text files, try to read the content
+      if (
+        fileName.toLowerCase().endsWith('.txt') ||
+        fileName.toLowerCase().endsWith('.md') ||
+        fileName.toLowerCase().endsWith('.json')
+      ) {
+        try {
+          const fileContent = await FileSystem.readAsStringAsync(fileUri);
+          return `File: ${fileName}\n\nContent:\n${fileContent}`;
+        } catch (error) {
+          console.log('Could not read file content:', error);
+        }
+      }
+
+      // For other files, return file information
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      const fileSize =
+        fileInfo.exists && !fileInfo.isDirectory && 'size' in fileInfo
+          ? fileInfo.size
+          : null;
+      return `File: ${fileName}\nSize: ${
+        fileSize ? Math.round(fileSize / 1024) : 'Unknown'
+      } KB\nType: ${activeTab}\n\nThis file has been attached to the note and can be accessed from the note details.`;
+    } catch (error) {
+      console.error('Error extracting file content:', error);
+      return `File: ${fileName}\nThis file has been attached to the note.`;
+    }
+  }
+
   async function handleAnalyzeContent() {
-    if (!content.trim()) {
-      Alert.alert('Error', 'Please enter some content to analyze');
+    if (!content.trim() && !selectedFile) {
+      Alert.alert(
+        'Error',
+        'Please enter some content or select a file to analyze'
+      );
       return;
     }
 
@@ -46,20 +128,35 @@ export default function CreateScreen() {
     try {
       let finalContent = content;
 
-      // If it's a URL, fetch the content first
-      if (activeTab === 'url') {
+      // Handle different content types
+      if (activeTab === 'url' && content.trim()) {
         try {
           finalContent = await fetchUrlContent(content);
         } catch (error) {
-          Alert.alert('Error', 'Could not fetch URL content. Please check the URL and try again.');
+          Alert.alert(
+            'Error',
+            'Could not fetch URL content. Please check the URL and try again.'
+          );
           setAnalyzing(false);
           return;
         }
+      } else if (
+        (activeTab === 'file' || activeTab === 'image') &&
+        selectedFile
+      ) {
+        finalContent = await extractFileContent(
+          selectedFile.uri,
+          selectedFile.name
+        );
+      } else if (!content.trim()) {
+        Alert.alert('Error', 'Please enter some content to analyze');
+        setAnalyzing(false);
+        return;
       }
 
-      // Get AI analysis with enhanced intelligence
+      // Get AI analysis
       const aiResult = await summarizeContent(finalContent, activeTab);
-      
+
       setAiPreview(aiResult);
       setCustomTitle(aiResult.title);
       setCustomSummary(aiResult.summary);
@@ -73,8 +170,8 @@ export default function CreateScreen() {
   }
 
   async function handleCreateNote() {
-    if (!content.trim()) {
-      Alert.alert('Error', 'Please enter some content');
+    if (!content.trim() && !selectedFile) {
+      Alert.alert('Error', 'Please enter some content or select a file');
       return;
     }
 
@@ -87,9 +184,10 @@ export default function CreateScreen() {
     setLoading(true);
     try {
       let finalContent = content;
+      let fileUrl = null;
 
-      // If it's a URL, fetch the content
-      if (activeTab === 'url') {
+      // Handle different content types
+      if (activeTab === 'url' && content.trim()) {
         try {
           finalContent = await fetchUrlContent(content);
         } catch (error) {
@@ -97,6 +195,15 @@ export default function CreateScreen() {
           setLoading(false);
           return;
         }
+      } else if (
+        (activeTab === 'file' || activeTab === 'image') &&
+        selectedFile
+      ) {
+        finalContent = await extractFileContent(
+          selectedFile.uri,
+          selectedFile.name
+        );
+        fileUrl = selectedFile.uri; // Store the local file URI for now
       }
 
       // Create note with AI-generated or custom data
@@ -107,15 +214,17 @@ export default function CreateScreen() {
         type: activeTab,
         tags: aiPreview.tags,
         source_url: activeTab === 'url' ? content : null,
-        file_url: activeTab === 'file' || activeTab === 'image' ? content : null,
+        file_url: fileUrl,
       };
 
       const newNote = await createNote(noteData);
-      
+
       if (newNote) {
-        Alert.alert('Success', 'Note created successfully with AI-powered organization!', [
-          { text: 'OK', onPress: () => router.push('/(tabs)') }
-        ]);
+        Alert.alert(
+          'Success',
+          'Note created successfully with AI-powered organization!',
+          [{ text: 'OK', onPress: () => router.push('/(tabs)') }]
+        );
         handleClearAll();
       } else {
         Alert.alert('Error', 'Failed to create note');
@@ -134,6 +243,7 @@ export default function CreateScreen() {
     setShowAiPreview(false);
     setCustomTitle('');
     setCustomSummary('');
+    setSelectedFile(null);
   }
 
   function handleDiscardPreview() {
@@ -147,30 +257,55 @@ export default function CreateScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      quality: 1,
+      quality: 0.8,
     });
 
     if (!result.canceled && result.assets[0]) {
-      setContent(result.assets[0].uri);
+      const asset = result.assets[0];
+      setSelectedFile({
+        uri: asset.uri,
+        name: asset.fileName || `image_${Date.now()}.jpg`,
+        size: asset.fileSize,
+        type: asset.type,
+        mimeType: asset.mimeType,
+      });
+      setContent(''); // Clear text content when file is selected
       setActiveTab('image');
+      // Clear any existing AI preview since content changed
+      setAiPreview(null);
+      setShowAiPreview(false);
     }
   }
 
   async function handleCameraPicker() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Camera access is required to take photos');
+      Alert.alert(
+        'Permission needed',
+        'Camera access is required to take photos'
+      );
       return;
     }
 
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
-      quality: 1,
+      quality: 0.8,
     });
 
     if (!result.canceled && result.assets[0]) {
-      setContent(result.assets[0].uri);
+      const asset = result.assets[0];
+      setSelectedFile({
+        uri: asset.uri,
+        name: `photo_${Date.now()}.jpg`,
+        size: asset.fileSize,
+        type: asset.type,
+        mimeType: asset.mimeType,
+      });
+      setContent(''); // Clear text content when file is selected
       setActiveTab('image');
+      // Clear any existing AI preview since content changed
+      setAiPreview(null);
+      setShowAiPreview(false);
     }
   }
 
@@ -182,23 +317,92 @@ export default function CreateScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        setContent(result.assets[0].uri);
+        const asset = result.assets[0];
+        setSelectedFile({
+          uri: asset.uri,
+          name: asset.name,
+          size: asset.size,
+          type: asset.file?.type,
+          mimeType: asset.mimeType,
+        });
+        setContent(''); // Clear text content when file is selected
         setActiveTab('file');
+        // Clear any existing AI preview since content changed
+        setAiPreview(null);
+        setShowAiPreview(false);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick document');
     }
   }
 
-  const tabs = [
-    { id: 'text', label: 'Text', icon: FileText },
-    { id: 'url', label: 'URL', icon: Link2 },
-    { id: 'file', label: 'File', icon: Upload },
-    { id: 'image', label: 'Image', icon: ImageIcon },
-  ];
+  const canAnalyze = (content.trim() || selectedFile) && !analyzing && !loading;
+  const canCreate =
+    (content.trim() || selectedFile) && aiPreview && !analyzing && !loading;
 
-  const canAnalyze = content.trim() && !analyzing && !loading;
-  const canCreate = content.trim() && aiPreview && !analyzing && !loading;
+  const renderFilePreview = () => {
+    if (!selectedFile) return null;
+
+    if (activeTab === 'image') {
+      return (
+        <View style={styles.imagePreviewContainer}>
+          <Image
+            source={{ uri: selectedFile.uri }}
+            style={styles.imagePreview}
+          />
+          <View style={styles.fileInfo}>
+            <Text style={styles.fileName} numberOfLines={1}>
+              {selectedFile.name}
+            </Text>
+            {selectedFile.size && (
+              <Text style={styles.fileSize}>
+                {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
+              </Text>
+            )}
+          </View>
+          <TouchableOpacity
+            style={styles.removeFileButton}
+            onPress={() => {
+              setSelectedFile(null);
+              setActiveTab('text');
+            }}
+          >
+            <X size={16} color="#EF4444" strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.filePreviewContainer}>
+        <FileText size={32} color="#6B7280" strokeWidth={1.5} />
+        <View style={styles.fileInfo}>
+          <Text style={styles.fileName} numberOfLines={1}>
+            {selectedFile.name}
+          </Text>
+          {selectedFile.size && (
+            <Text style={styles.fileSize}>
+              {selectedFile.size > 1024 * 1024
+                ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB`
+                : `${(selectedFile.size / 1024).toFixed(0)} KB`}
+            </Text>
+          )}
+          {selectedFile.mimeType && (
+            <Text style={styles.fileType}>{selectedFile.mimeType}</Text>
+          )}
+        </View>
+        <TouchableOpacity
+          style={styles.removeFileButton}
+          onPress={() => {
+            setSelectedFile(null);
+            setActiveTab('text');
+          }}
+        >
+          <X size={16} color="#EF4444" strokeWidth={2} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -210,105 +414,108 @@ export default function CreateScreen() {
             <Text style={styles.aiIndicatorText}>AI-Powered</Text>
           </View>
         </View>
-        <Text style={styles.subtitle}>AI will automatically analyze and organize your content</Text>
+        <Text style={styles.subtitle}>
+          AI will automatically analyze and organize your content
+        </Text>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.tabs}>
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
+        <View style={styles.inputSection}>
+          <Text style={styles.inputLabel}>Enter your content</Text>
+
+          {/* File Preview */}
+          {selectedFile && renderFilePreview()}
+
+          <View style={styles.inputContainer}>
+            <TextInput
+              style={styles.textInput}
+              value={content}
+              onChangeText={handleContentChange}
+              placeholder={
+                selectedFile
+                  ? 'Add additional notes about this file (optional)...'
+                  : activeTab === 'url'
+                  ? 'Paste a URL (e.g., https://example.com/article)...'
+                  : 'Type your content here...'
+              }
+              placeholderTextColor="#9CA3AF"
+              multiline
+              textAlignVertical="top"
+              keyboardType={activeTab === 'url' ? 'url' : 'default'}
+              autoCapitalize={activeTab === 'url' ? 'none' : 'sentences'}
+              autoCorrect={activeTab !== 'url'}
+            />
+            <View style={styles.inputActions}>
               <TouchableOpacity
-                key={tab.id}
-                style={[styles.tab, isActive && styles.activeTab]}
-                onPress={() => setActiveTab(tab.id as NoteType)}
+                style={[
+                  styles.actionButton,
+                  activeTab === 'file' && styles.actionButtonActive,
+                ]}
+                onPress={handleDocumentPicker}
               >
-                <Icon 
-                  size={20} 
-                  color={isActive ? '#2563EB' : '#6B7280'} 
+                <Upload
+                  size={20}
+                  color={activeTab === 'file' ? '#2563EB' : '#6B7280'}
                   strokeWidth={2}
                 />
-                <Text style={[styles.tabText, isActive && styles.activeTabText]}>
-                  {tab.label}
-                </Text>
               </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <View style={styles.inputSection}>
-          {activeTab === 'text' && (
-            <View>
-              <Text style={styles.inputLabel}>Enter your text</Text>
-              <TextInput
-                style={styles.textInput}
-                value={content}
-                onChangeText={setContent}
-                placeholder="Type or paste your content here..."
-                placeholderTextColor="#9CA3AF"
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          )}
-
-          {activeTab === 'url' && (
-            <View>
-              <Text style={styles.inputLabel}>Enter URL</Text>
-              <TextInput
-                style={styles.urlInput}
-                value={content}
-                onChangeText={setContent}
-                placeholder="https://example.com/article"
-                keyboardType="url"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-            </View>
-          )}
-
-          {activeTab === 'file' && (
-            <View style={styles.fileSection}>
-              <Text style={styles.inputLabel}>Upload Document</Text>
-              <TouchableOpacity style={styles.uploadButton} onPress={handleDocumentPicker}>
-                <Upload size={24} color="#2563EB" strokeWidth={2} />
-                <Text style={styles.uploadText}>Choose File</Text>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  activeTab === 'image' && styles.actionButtonActive,
+                ]}
+                onPress={handleImagePicker}
+              >
+                <ImageIcon
+                  size={20}
+                  color={activeTab === 'image' ? '#2563EB' : '#6B7280'}
+                  strokeWidth={2}
+                />
               </TouchableOpacity>
-              {content && (
-                <Text style={styles.selectedFile}>
-                  Selected: {content.split('/').pop() || 'File selected'}
-                </Text>
-              )}
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  activeTab === 'image' && styles.actionButtonActive,
+                ]}
+                onPress={handleCameraPicker}
+              >
+                <Camera
+                  size={20}
+                  color={activeTab === 'image' ? '#2563EB' : '#6B7280'}
+                  strokeWidth={2}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  activeTab === 'url' && styles.actionButtonActive,
+                ]}
+                onPress={() => {
+                  // Switch to URL mode and clear file
+                  setActiveTab('url');
+                  setSelectedFile(null);
+                  if (!content.trim()) {
+                    setContent('');
+                  }
+                }}
+              >
+                <Link2
+                  size={20}
+                  color={activeTab === 'url' ? '#2563EB' : '#6B7280'}
+                  strokeWidth={2}
+                />
+              </TouchableOpacity>
             </View>
-          )}
-
-          {activeTab === 'image' && (
-            <View style={styles.imageSection}>
-              <Text style={styles.inputLabel}>Add Image</Text>
-              <View style={styles.imageButtons}>
-                <TouchableOpacity style={styles.imageButton} onPress={handleCameraPicker}>
-                  <Camera size={24} color="#2563EB" strokeWidth={2} />
-                  <Text style={styles.imageButtonText}>Take Photo</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.imageButton} onPress={handleImagePicker}>
-                  <ImageIcon size={24} color="#2563EB" strokeWidth={2} />
-                  <Text style={styles.imageButtonText}>Choose Photo</Text>
-                </TouchableOpacity>
-              </View>
-              {content && (
-                <Text style={styles.selectedFile}>
-                  Selected: {content.split('/').pop() || 'Image selected'}
-                </Text>
-              )}
-            </View>
-          )}
+          </View>
         </View>
 
         {/* Enhanced AI Analysis Button */}
         {!showAiPreview && (
           <TouchableOpacity
-            style={[styles.analyzeButton, !canAnalyze && styles.analyzeButtonDisabled]}
+            style={[
+              styles.analyzeButton,
+              !canAnalyze && styles.analyzeButtonDisabled,
+            ]}
             onPress={handleAnalyzeContent}
             disabled={!canAnalyze}
           >
@@ -330,12 +537,28 @@ export default function CreateScreen() {
         {analyzing && (
           <View style={styles.loadingSection}>
             <Sparkles size={32} color="#7C3AED" strokeWidth={2} />
-            <Text style={styles.loadingText}>AI is analyzing your content...</Text>
-            <Text style={styles.loadingSubtext}>Generating perfect title, summary, and tags</Text>
+            <Text style={styles.loadingText}>
+              AI is analyzing your{' '}
+              {activeTab === 'image'
+                ? 'image'
+                : activeTab === 'file'
+                ? 'file'
+                : 'content'}
+              ...
+            </Text>
+            <Text style={styles.loadingSubtext}>
+              Generating perfect title, summary, and tags
+            </Text>
             <View style={styles.loadingSteps}>
-              <Text style={styles.loadingStep}>✓ Reading content structure</Text>
-              <Text style={styles.loadingStep}>✓ Understanding context and meaning</Text>
-              <Text style={styles.loadingStep}>⚡ Creating human-readable summary</Text>
+              <Text style={styles.loadingStep}>
+                ✓ Reading {activeTab} structure
+              </Text>
+              <Text style={styles.loadingStep}>
+                ✓ Understanding context and meaning
+              </Text>
+              <Text style={styles.loadingStep}>
+                ⚡ Creating human-readable summary
+              </Text>
             </View>
           </View>
         )}
@@ -349,7 +572,10 @@ export default function CreateScreen() {
                 <Text style={styles.previewTitle}>AI Analysis Complete</Text>
                 <Star size={16} color="#F59E0B" strokeWidth={2} />
               </View>
-              <TouchableOpacity onPress={handleDiscardPreview} style={styles.discardButton}>
+              <TouchableOpacity
+                onPress={handleDiscardPreview}
+                style={styles.discardButton}
+              >
                 <X size={16} color="#6B7280" strokeWidth={2} />
               </TouchableOpacity>
             </View>
@@ -396,14 +622,19 @@ export default function CreateScreen() {
 
             <View style={styles.aiQualityIndicator}>
               <Brain size={16} color="#059669" strokeWidth={2} />
-              <Text style={styles.aiQualityText}>AI-powered content analysis complete</Text>
+              <Text style={styles.aiQualityText}>
+                AI-powered content analysis complete
+              </Text>
             </View>
           </View>
         )}
 
         {/* Enhanced Create Note Button */}
         <TouchableOpacity
-          style={[styles.createButton, !canCreate && styles.createButtonDisabled]}
+          style={[
+            styles.createButton,
+            !canCreate && styles.createButtonDisabled,
+          ]}
           onPress={handleCreateNote}
           disabled={!canCreate}
         >
@@ -415,12 +646,14 @@ export default function CreateScreen() {
               <Text style={styles.createButtonText}>
                 {aiPreview ? 'Create Note' : 'Analyze & Create Note'}
               </Text>
-              {aiPreview && <Sparkles size={16} color="#ffffff" strokeWidth={2} />}
+              {aiPreview && (
+                <Sparkles size={16} color="#ffffff" strokeWidth={2} />
+              )}
             </View>
           )}
         </TouchableOpacity>
 
-        {content && (
+        {(content || selectedFile) && (
           <TouchableOpacity style={styles.clearButton} onPress={handleClearAll}>
             <Text style={styles.clearButtonText}>Clear All</Text>
           </TouchableOpacity>
@@ -476,32 +709,12 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
-  tabs: {
-    flexDirection: 'row',
+  inputContainer: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    padding: 4,
-    marginBottom: 24,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  activeTab: {
-    backgroundColor: '#EFF6FF',
-  },
-  tabText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  activeTabText: {
-    color: '#2563EB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
   },
   inputSection: {
     marginBottom: 24,
@@ -513,73 +726,95 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   textInput: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
     padding: 16,
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#111827',
     minHeight: 200,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  urlInput: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  fileSection: {
-    gap: 16,
-  },
-  uploadButton: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    gap: 8,
-  },
-  uploadText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#2563EB',
-  },
-  imageSection: {
-    gap: 16,
-  },
-  imageButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  imageButton: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+  },
+  inputActions: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F9FAFB',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
     gap: 8,
   },
-  imageButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#2563EB',
+  actionButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
-  selectedFile: {
+  actionButtonActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#2563EB',
+  },
+  imagePreviewContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    marginBottom: 16,
+    position: 'relative',
+  },
+  imagePreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    resizeMode: 'cover',
+  },
+  filePreviewContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  fileInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginTop: 8,
+  },
+  fileName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  fileSize: {
     fontSize: 14,
     fontFamily: 'Inter-Regular',
-    color: '#059669',
-    backgroundColor: '#F0FDF4',
-    padding: 12,
-    borderRadius: 8,
+    color: '#6B7280',
+    marginBottom: 2,
+  },
+  fileType: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#9CA3AF',
+  },
+  removeFileButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   analyzeButton: {
     backgroundColor: '#7C3AED',
