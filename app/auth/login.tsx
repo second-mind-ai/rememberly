@@ -18,19 +18,31 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSignIn() {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      setError('Please fill in all fields');
       return;
     }
 
     setLoading(true);
-    const { error } = await signIn(email, password);
+    setError(null);
+    
+    const { error: signInError } = await signIn(email, password);
     setLoading(false);
 
-    if (error) {
-      Alert.alert('Error', error.message);
+    if (signInError) {
+      // Provide more user-friendly error messages
+      if (signInError.message.includes('Invalid login credentials')) {
+        setError('Invalid email or password. Please check your credentials and try again.');
+      } else if (signInError.message.includes('Email not confirmed')) {
+        setError('Please check your email and click the confirmation link before signing in.');
+      } else if (signInError.message.includes('Too many requests')) {
+        setError('Too many login attempts. Please wait a moment before trying again.');
+      } else {
+        setError(signInError.message);
+      }
     } else {
       router.replace('/(tabs)');
     }
@@ -52,12 +64,21 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.form}>
+            {error && (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Email</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, error && styles.inputError]}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (error) setError(null); // Clear error when user starts typing
+                }}
                 placeholder="Enter your email"
                 placeholderTextColor="#9CA3AF"
                 keyboardType="email-address"
@@ -69,9 +90,12 @@ export default function LoginScreen() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Password</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, error && styles.inputError]}
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (error) setError(null); // Clear error when user starts typing
+                }}
                 placeholder="Enter your password"
                 placeholderTextColor="#9CA3AF"
                 secureTextEntry
@@ -147,6 +171,20 @@ const styles = StyleSheet.create({
   form: {
     gap: 20,
   },
+  errorContainer: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  errorText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    textAlign: 'center',
+  },
   inputContainer: {
     gap: 8,
   },
@@ -163,6 +201,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter-Regular',
     color: '#1F2937',
+  },
+  inputError: {
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.5)',
   },
   button: {
     height: 56,
