@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   Image,
   Dimensions,
+  Modal,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -31,6 +33,7 @@ import {
   Zap,
   Star,
   AlertCircle,
+  CheckCircle,
 } from 'lucide-react-native';
 
 type NoteType = 'text' | 'url' | 'file' | 'image';
@@ -49,6 +52,13 @@ interface FileInfo {
   mimeType?: string;
 }
 
+// Helper function to extract the first URL from text
+function extractFirstUrl(text: string): string | null {
+  const urlRegex = /(https?:\/\/[^\s\n]+)/g;
+  const match = text.match(urlRegex);
+  return match ? match[0] : null;
+}
+
 const { width } = Dimensions.get('window');
 
 export default function CreateScreen() {
@@ -61,7 +71,52 @@ export default function CreateScreen() {
   const [customTitle, setCustomTitle] = useState('');
   const [customSummary, setCustomSummary] = useState('');
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [scaleAnim] = useState(new Animated.Value(0.8));
   const { createNote } = useNotesStore();
+
+  function showSweetAlert() {
+    setShowSuccessModal(true);
+
+    // Start animation
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 150,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Auto hide after 2 seconds and navigate
+    setTimeout(() => {
+      hideSweetAlert();
+    }, 2000);
+  }
+
+  function hideSweetAlert() {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 0.8,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowSuccessModal(false);
+      router.push('/(tabs)');
+    });
+  }
 
   function handleContentChange(text: string) {
     setContent(text);
@@ -175,19 +230,67 @@ export default function CreateScreen() {
       return;
     }
 
-    // If no AI preview exists, analyze first
-    if (!aiPreview) {
-      await handleAnalyzeContent();
-      return;
-    }
-
     setLoading(true);
     try {
       let finalContent = content;
       let fileUrl = null;
+      let aiResult = aiPreview;
 
-      // Handle different content types
-      if (activeTab === 'url' && content.trim()) {
+      // If no AI preview exists, analyze first
+      if (!aiResult) {
+        setAnalyzing(true);
+        try {
+          // Handle different content types for analysis
+          if (activeTab === 'url' && content.trim()) {
+            try {
+              finalContent = await fetchUrlContent(content);
+            } catch (error) {
+              Alert.alert(
+                'Error',
+                'Could not fetch URL content. Please check the URL and try again.'
+              );
+              setAnalyzing(false);
+              setLoading(false);
+              return;
+            }
+          } else if (
+            (activeTab === 'file' || activeTab === 'image') &&
+            selectedFile
+          ) {
+            finalContent = await extractFileContent(
+              selectedFile.uri,
+              selectedFile.name
+            );
+          } else if (!content.trim()) {
+            Alert.alert('Error', 'Please enter some content to analyze');
+            setAnalyzing(false);
+            setLoading(false);
+            return;
+          }
+
+          // Get AI analysis
+          aiResult = await summarizeContent(finalContent, activeTab);
+          setAiPreview(aiResult);
+          setCustomTitle(aiResult.title);
+          setCustomSummary(aiResult.summary);
+          setShowAiPreview(true);
+        } catch (error) {
+          Alert.alert('Error', 'Failed to analyze content. Please try again.');
+          console.error('Analysis error:', error);
+          setAnalyzing(false);
+          setLoading(false);
+          return;
+        } finally {
+          setAnalyzing(false);
+        }
+      }
+
+      // Now handle content preparation for note creation
+      if (
+        activeTab === 'url' &&
+        content.trim() &&
+        !finalContent.includes('Content:')
+      ) {
         try {
           finalContent = await fetchUrlContent(content);
         } catch (error) {
@@ -199,33 +302,31 @@ export default function CreateScreen() {
         (activeTab === 'file' || activeTab === 'image') &&
         selectedFile
       ) {
-        finalContent = await extractFileContent(
-          selectedFile.uri,
-          selectedFile.name
-        );
+        if (!finalContent.includes('File:')) {
+          finalContent = await extractFileContent(
+            selectedFile.uri,
+            selectedFile.name
+          );
+        }
         fileUrl = selectedFile.uri; // Store the local file URI for now
       }
 
       // Create note with AI-generated or custom data
       const noteData = {
-        title: customTitle || aiPreview.title,
+        title: customTitle || aiResult.title,
         original_content: finalContent,
-        summary: customSummary || aiPreview.summary,
+        summary: customSummary || aiResult.summary,
         type: activeTab,
-        tags: aiPreview.tags,
-        source_url: activeTab === 'url' ? content : null,
+        tags: aiResult.tags,
+        source_url: extractFirstUrl(finalContent),
         file_url: fileUrl,
       };
 
       const newNote = await createNote(noteData);
 
       if (newNote) {
-        Alert.alert(
-          'Success',
-          'Note created successfully with AI-powered organization!',
-          [{ text: 'OK', onPress: () => router.push('/(tabs)') }]
-        );
         handleClearAll();
+        showSweetAlert();
       } else {
         Alert.alert('Error', 'Failed to create note');
       }
@@ -337,8 +438,7 @@ export default function CreateScreen() {
   }
 
   const canAnalyze = (content.trim() || selectedFile) && !analyzing && !loading;
-  const canCreate =
-    (content.trim() || selectedFile) && aiPreview && !analyzing && !loading;
+  const canCreate = (content.trim() || selectedFile) && !analyzing && !loading;
 
   const renderFilePreview = () => {
     if (!selectedFile) return null;
@@ -472,67 +572,9 @@ export default function CreateScreen() {
                   strokeWidth={2}
                 />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  activeTab === 'image' && styles.actionButtonActive,
-                ]}
-                onPress={handleCameraPicker}
-              >
-                <Camera
-                  size={20}
-                  color={activeTab === 'image' ? '#2563EB' : '#6B7280'}
-                  strokeWidth={2}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  activeTab === 'url' && styles.actionButtonActive,
-                ]}
-                onPress={() => {
-                  // Switch to URL mode and clear file
-                  setActiveTab('url');
-                  setSelectedFile(null);
-                  if (!content.trim()) {
-                    setContent('');
-                  }
-                }}
-              >
-                <Link2
-                  size={20}
-                  color={activeTab === 'url' ? '#2563EB' : '#6B7280'}
-                  strokeWidth={2}
-                />
-              </TouchableOpacity>
             </View>
           </View>
         </View>
-
-        {/* Enhanced AI Analysis Button */}
-        {!showAiPreview && (
-          <TouchableOpacity
-            style={[
-              styles.analyzeButton,
-              !canAnalyze && styles.analyzeButtonDisabled,
-            ]}
-            onPress={handleAnalyzeContent}
-            disabled={!canAnalyze}
-          >
-            {analyzing ? (
-              <View style={styles.analyzingContainer}>
-                <ActivityIndicator color="#ffffff" size="small" />
-                <Text style={styles.analyzeButtonText}>Analyzing...</Text>
-              </View>
-            ) : (
-              <View style={styles.analyzeContainer}>
-                <Brain size={20} color="#ffffff" strokeWidth={2} />
-                <Text style={styles.analyzeButtonText}>Analyze with AI</Text>
-                <Zap size={16} color="#ffffff" strokeWidth={2} />
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
 
         {analyzing && (
           <View style={styles.loadingSection}>
@@ -638,8 +680,13 @@ export default function CreateScreen() {
           onPress={handleCreateNote}
           disabled={!canCreate}
         >
-          {loading ? (
-            <ActivityIndicator color="#ffffff" />
+          {loading || analyzing ? (
+            <View style={styles.createContainer}>
+              <ActivityIndicator color="#ffffff" size="small" />
+              <Text style={styles.createButtonText}>
+                {analyzing ? 'Analyzing...' : 'Creating Note...'}
+              </Text>
+            </View>
           ) : (
             <View style={styles.createContainer}>
               <Check size={20} color="#ffffff" strokeWidth={2} />
@@ -659,6 +706,42 @@ export default function CreateScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+
+      {/* Sweet Alert Modal */}
+      <Modal
+        transparent={true}
+        visible={showSuccessModal}
+        animationType="none"
+        onRequestClose={() => setShowSuccessModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View
+            style={[
+              styles.modalContainer,
+              {
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }],
+              },
+            ]}
+          >
+            <View style={styles.modalContent}>
+              <View style={styles.successIconContainer}>
+                <CheckCircle size={60} color="#059669" strokeWidth={2} />
+              </View>
+              <Text style={styles.modalTitle}>Success!</Text>
+              <Text style={styles.modalMessage}>
+                Note created successfully with AI-powered organization!
+              </Text>
+              <View style={styles.modalFooter}>
+                <Sparkles size={20} color="#7C3AED" strokeWidth={2} />
+                <Text style={styles.modalFooterText}>
+                  Redirecting to home...
+                </Text>
+              </View>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1005,5 +1088,64 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Medium',
     color: '#6B7280',
+  },
+  // Sweet Alert Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 0,
+    maxWidth: 320,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalContent: {
+    padding: 30,
+    alignItems: 'center',
+  },
+  successIconContainer: {
+    marginBottom: 20,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 50,
+    padding: 15,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontFamily: 'Inter-Bold',
+    color: '#111827',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 20,
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F9FAFB',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  modalFooterText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#7C3AED',
   },
 });

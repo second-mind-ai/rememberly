@@ -71,12 +71,12 @@ export function NoteCard({ note }: NoteCardProps) {
   const handleOpenSourceLink = async (e: any) => {
     e.stopPropagation(); // Prevent card navigation when clicking link
 
-    if (!note.source_url) return;
+    if (!displaySourceUrl) return;
 
     try {
-      const supported = await Linking.canOpenURL(note.source_url);
+      const supported = await Linking.canOpenURL(displaySourceUrl);
       if (supported) {
-        await Linking.openURL(note.source_url);
+        await Linking.openURL(displaySourceUrl);
       } else {
         Alert.alert('Error', 'Cannot open this URL');
       }
@@ -207,7 +207,15 @@ export function NoteCard({ note }: NoteCardProps) {
   // Check if content has links
   const contentLinks = extractLinksFromText(note.original_content);
   const summaryLinks = extractLinksFromText(note.summary || '');
-  const hasContentLinks = contentLinks.length > 0 || summaryLinks.length > 0;
+  const allContentLinks = [...new Set([...contentLinks, ...summaryLinks])];
+  const hasContentLinks = allContentLinks.length > 0;
+
+  // Use first content link as source URL if no source_url exists
+  const displaySourceUrl =
+    note.source_url || (hasContentLinks ? allContentLinks[0] : null);
+  const remainingContentLinks = note.source_url
+    ? allContentLinks
+    : allContentLinks.slice(1);
 
   return (
     <TouchableOpacity
@@ -226,7 +234,7 @@ export function NoteCard({ note }: NoteCardProps) {
             <Calendar size={12} color="#9CA3AF" strokeWidth={2} />
             <Text style={styles.dateText}>{formatDate(note.created_at)}</Text>
           </View>
-          {note.source_url && (
+          {displaySourceUrl && (
             <TouchableOpacity
               style={styles.linkButton}
               onPress={handleOpenSourceLink}
@@ -249,45 +257,46 @@ export function NoteCard({ note }: NoteCardProps) {
       {renderTextWithLinks(note.summary || note.original_content)}
 
       {/* Source URL section */}
-      {note.source_url && (
+      {displaySourceUrl && (
         <TouchableOpacity
           style={styles.sourceLink}
-          onPress={handleOpenSourceLink}
+          onPress={(e) => {
+            e.stopPropagation();
+            handleTextLinkPress(displaySourceUrl, e);
+          }}
           activeOpacity={0.7}
         >
           <Link2 size={12} color="#2563EB" strokeWidth={2} />
           <Text style={styles.sourceLinkText} numberOfLines={1}>
-            {note.source_url.replace(/^https?:\/\//, '').replace(/^www\./, '')}
+            {displaySourceUrl.replace(/^https?:\/\//, '').replace(/^www\./, '')}
           </Text>
           <ExternalLink size={12} color="#2563EB" strokeWidth={2} />
         </TouchableOpacity>
       )}
 
       {/* Additional links found in content */}
-      {hasContentLinks && !note.source_url && (
+      {remainingContentLinks.length > 0 && (
         <View style={styles.additionalLinksContainer}>
           <View style={styles.additionalLinksHeader}>
             <Link2 size={12} color="#6B7280" strokeWidth={2} />
             <Text style={styles.additionalLinksTitle}>
-              {contentLinks.length + summaryLinks.length} link
-              {contentLinks.length + summaryLinks.length !== 1 ? 's' : ''} found
+              {remainingContentLinks.length} additional link
+              {remainingContentLinks.length !== 1 ? 's' : ''} found
             </Text>
           </View>
-          {[...new Set([...contentLinks, ...summaryLinks])]
-            .slice(0, 2)
-            .map((link, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.additionalLink}
-                onPress={(e) => handleTextLinkPress(link, e)}
-                activeOpacity={0.7}
-              >
-                <ExternalLink size={10} color="#6B7280" strokeWidth={2} />
-                <Text style={styles.additionalLinkText} numberOfLines={1}>
-                  {link.replace(/^https?:\/\//, '').replace(/^www\./, '')}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {remainingContentLinks.slice(0, 2).map((link, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.additionalLink}
+              onPress={(e) => handleTextLinkPress(link, e)}
+              activeOpacity={0.7}
+            >
+              <ExternalLink size={10} color="#6B7280" strokeWidth={2} />
+              <Text style={styles.additionalLinkText} numberOfLines={1}>
+                {link.replace(/^https?:\/\//, '').replace(/^www\./, '')}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 

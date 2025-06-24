@@ -137,15 +137,44 @@ export const useNotesStore = create<NotesState>((set, get) => ({
   deleteNote: async (id) => {
     try {
       set({ loading: true, error: null });
-      const { error } = await supabase.from('notes').delete().eq('id', id);
+      console.log('Attempting to delete note with ID:', id);
+
+      // Verify user is authenticated
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error('User not authenticated');
+      }
+      console.log('User authenticated, proceeding with delete');
+
+      const { data, error } = await supabase
+        .from('notes')
+        .delete()
+        .eq('id', id)
+        .select(); // Add select to see what was deleted
+
+      console.log('Delete operation result:', { data, error });
 
       if (error) throw error;
+
+      // Check if any rows were actually deleted
+      if (!data || data.length === 0) {
+        throw new Error(
+          'Note not found or you do not have permission to delete it'
+        );
+      }
 
       const currentNotes = get().notes;
       const filteredNotes = currentNotes.filter((note) => note.id !== id);
       set({ notes: filteredNotes, loading: false });
+      console.log('Note successfully deleted from local state');
     } catch (error) {
-      set({ error: (error as Error).message, loading: false });
+      const errorMessage = (error as Error).message;
+      console.error('Delete note error:', error);
+      set({ error: errorMessage, loading: false });
+      throw error; // Re-throw the error so the calling function knows it failed
     }
   },
 

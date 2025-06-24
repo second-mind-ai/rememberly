@@ -20,7 +20,6 @@ import {
   ArrowLeft,
   Calendar,
   Bell,
-  LocationEdit as Edit3,
   Trash2,
   ExternalLink,
   File,
@@ -33,7 +32,7 @@ type Note = Database['public']['Tables']['notes']['Row'];
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { notes, updateNote, deleteNote } = useNotesStore();
+  const { notes, deleteNote } = useNotesStore();
   const { createReminder } = useReminderStore();
   const [note, setNote] = useState<Note | null>(null);
   const [showReminderForm, setShowReminderForm] = useState(false);
@@ -93,6 +92,7 @@ export default function NoteDetailScreen() {
 
       setShowReminderForm(false);
     } catch (error) {
+      console.error('Failed to create reminder:', error);
       Alert.alert('Error', 'Failed to create reminder');
     } finally {
       setLoading(false);
@@ -109,8 +109,16 @@ export default function NoteDetailScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await deleteNote(id);
-            router.back();
+            try {
+              setLoading(true);
+              await deleteNote(id);
+              router.back();
+            } catch (error) {
+              console.error('Failed to delete note:', error);
+              Alert.alert('Error', 'Failed to delete note. Please try again.');
+            } finally {
+              setLoading(false);
+            }
           },
         },
       ]
@@ -127,6 +135,7 @@ export default function NoteDetailScreen() {
           Alert.alert('Error', 'Cannot open this URL');
         }
       } catch (error) {
+        console.error('Failed to open URL:', error);
         Alert.alert('Error', 'Failed to open URL');
       }
     }
@@ -248,8 +257,16 @@ export default function NoteDetailScreen() {
               <ExternalLink size={20} color="#6B7280" strokeWidth={2} />
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={handleDelete} style={styles.actionButton}>
-            <Trash2 size={20} color="#DC2626" strokeWidth={2} />
+          <TouchableOpacity
+            onPress={handleDelete}
+            style={[styles.actionButton, loading && styles.buttonDisabled]}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator size={20} color="#DC2626" />
+            ) : (
+              <Trash2 size={20} color="#DC2626" strokeWidth={2} />
+            )}
           </TouchableOpacity>
         </View>
       </View>
