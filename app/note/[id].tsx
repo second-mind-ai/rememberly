@@ -9,12 +9,22 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Image,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useNotesStore } from '@/lib/store';
 import { useReminderStore } from '@/lib/reminderStore';
-import { ArrowLeft, Calendar, Bell, LocationEdit as Edit3, Trash2, ExternalLink } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Calendar,
+  Bell,
+  Trash2,
+  ExternalLink,
+  File,
+  Download,
+} from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Database } from '@/lib/supabase';
 
@@ -22,14 +32,14 @@ type Note = Database['public']['Tables']['notes']['Row'];
 
 export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { notes, updateNote, deleteNote } = useNotesStore();
+  const { notes, deleteNote } = useNotesStore();
   const { createReminder } = useReminderStore();
   const [note, setNote] = useState<Note | null>(null);
   const [showReminderForm, setShowReminderForm] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [loading, setLoading] = useState(false);
-  
+
   const [reminderData, setReminderData] = useState({
     title: '',
     description: '',
@@ -38,10 +48,10 @@ export default function NoteDetailScreen() {
   });
 
   useEffect(() => {
-    const foundNote = notes.find(n => n.id === id);
+    const foundNote = notes.find((n) => n.id === id);
     if (foundNote) {
       setNote(foundNote);
-      setReminderData(prev => ({
+      setReminderData((prev) => ({
         ...prev,
         title: `Review: ${foundNote.title}`,
         description: foundNote.summary || 'Review this note',
@@ -74,11 +84,15 @@ export default function NoteDetailScreen() {
 
       Alert.alert(
         'Reminder Set',
-        `You'll be reminded about this note on ${reminderData.dateTime.toLocaleDateString()} at ${reminderData.dateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        `You'll be reminded about this note on ${reminderData.dateTime.toLocaleDateString()} at ${reminderData.dateTime.toLocaleTimeString(
+          [],
+          { hour: '2-digit', minute: '2-digit' }
+        )}`
       );
-      
+
       setShowReminderForm(false);
     } catch (error) {
+      console.error('Failed to create reminder:', error);
       Alert.alert('Error', 'Failed to create reminder');
     } finally {
       setLoading(false);
@@ -95,19 +109,90 @@ export default function NoteDetailScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await deleteNote(id);
-            router.back();
+            try {
+              setLoading(true);
+              await deleteNote(id);
+              router.back();
+            } catch (error) {
+              console.error('Failed to delete note:', error);
+              Alert.alert('Error', 'Failed to delete note. Please try again.');
+            } finally {
+              setLoading(false);
+            }
           },
         },
       ]
     );
   }
 
-  function handleOpenUrl() {
+  async function handleOpenUrl() {
     if (note?.source_url) {
-      Alert.alert('Open URL', `Would open: ${note.source_url}`);
+      try {
+        const supported = await Linking.canOpenURL(note.source_url);
+        if (supported) {
+          await Linking.openURL(note.source_url);
+        } else {
+          Alert.alert('Error', 'Cannot open this URL');
+        }
+      } catch (error) {
+        console.error('Failed to open URL:', error);
+        Alert.alert('Error', 'Failed to open URL');
+      }
     }
   }
+
+  const renderFileAttachment = () => {
+    if (!note?.file_url) return null;
+
+    if (note.type === 'image') {
+      return (
+        <View style={styles.fileSection}>
+          <Text style={styles.sectionTitle}>Attached Image</Text>
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: note.file_url }}
+              style={styles.attachedImage}
+              onError={() => {
+                console.log('Failed to load image:', note.file_url);
+              }}
+              resizeMode="contain"
+            />
+          </View>
+        </View>
+      );
+    }
+
+    if (note.type === 'file') {
+      const fileName = note.file_url.split('/').pop() || 'Unknown file';
+      return (
+        <View style={styles.fileSection}>
+          <Text style={styles.sectionTitle}>Attached File</Text>
+          <TouchableOpacity
+            style={styles.fileAttachment}
+            onPress={() => {
+              Alert.alert(
+                'File Access',
+                `File: ${fileName}\n\nNote: Local files are not currently supported for opening. This is stored as: ${note?.file_url}`
+              );
+            }}
+          >
+            <File size={32} color="#D97706" strokeWidth={1.5} />
+            <View style={styles.fileAttachmentInfo}>
+              <Text style={styles.fileAttachmentName} numberOfLines={2}>
+                {fileName}
+              </Text>
+              <Text style={styles.fileAttachmentType}>
+                {note.type.toUpperCase()} FILE • Tap for details
+              </Text>
+            </View>
+            <Download size={20} color="#6B7280" strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return null;
+  };
 
   function onDateChange(event: any, selectedDate?: Date) {
     setShowDatePicker(false);
@@ -116,7 +201,7 @@ export default function NoteDetailScreen() {
       newDateTime.setFullYear(selectedDate.getFullYear());
       newDateTime.setMonth(selectedDate.getMonth());
       newDateTime.setDate(selectedDate.getDate());
-      setReminderData(prev => ({ ...prev, dateTime: newDateTime }));
+      setReminderData((prev) => ({ ...prev, dateTime: newDateTime }));
     }
   }
 
@@ -126,7 +211,7 @@ export default function NoteDetailScreen() {
       const newDateTime = new Date(reminderData.dateTime);
       newDateTime.setHours(selectedTime.getHours());
       newDateTime.setMinutes(selectedTime.getMinutes());
-      setReminderData(prev => ({ ...prev, dateTime: newDateTime }));
+      setReminderData((prev) => ({ ...prev, dateTime: newDateTime }));
     }
   }
 
@@ -144,23 +229,44 @@ export default function NoteDetailScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
           <ArrowLeft size={24} color="#111827" strokeWidth={2} />
         </TouchableOpacity>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
-            onPress={() => setShowReminderForm(!showReminderForm)} 
-            style={[styles.actionButton, showReminderForm && styles.actionButtonActive]}
+          <TouchableOpacity
+            onPress={() => setShowReminderForm(!showReminderForm)}
+            style={[
+              styles.actionButton,
+              showReminderForm && styles.actionButtonActive,
+            ]}
           >
-            <Bell size={20} color={showReminderForm ? "#ffffff" : "#6B7280"} strokeWidth={2} />
+            <Bell
+              size={20}
+              color={showReminderForm ? '#ffffff' : '#6B7280'}
+              strokeWidth={2}
+            />
           </TouchableOpacity>
           {note.source_url && (
-            <TouchableOpacity onPress={handleOpenUrl} style={styles.actionButton}>
+            <TouchableOpacity
+              onPress={handleOpenUrl}
+              style={styles.actionButton}
+            >
               <ExternalLink size={20} color="#6B7280" strokeWidth={2} />
             </TouchableOpacity>
           )}
-          <TouchableOpacity onPress={handleDelete} style={styles.actionButton}>
-            <Trash2 size={20} color="#DC2626" strokeWidth={2} />
+          <TouchableOpacity
+            onPress={handleDelete}
+            style={[styles.actionButton, loading && styles.buttonDisabled]}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator size={20} color="#DC2626" />
+            ) : (
+              <Trash2 size={20} color="#DC2626" strokeWidth={2} />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -168,7 +274,7 @@ export default function NoteDetailScreen() {
       <ScrollView style={styles.content}>
         <View style={styles.noteSection}>
           <Text style={styles.noteTitle}>{note.title}</Text>
-          
+
           <View style={styles.noteMeta}>
             <View style={styles.typeIndicator}>
               <Text style={styles.typeText}>{note.type.toUpperCase()}</Text>
@@ -189,6 +295,9 @@ export default function NoteDetailScreen() {
               <Text style={styles.summaryText}>{note.summary}</Text>
             </View>
           )}
+
+          {/* Render file attachment if available */}
+          {renderFileAttachment()}
 
           <View style={styles.contentSection}>
             <Text style={styles.sectionTitle}>Original Content</Text>
@@ -212,13 +321,15 @@ export default function NoteDetailScreen() {
         {showReminderForm && (
           <View style={styles.reminderSection}>
             <Text style={styles.sectionTitle}>Set Reminder for This Note</Text>
-            
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Reminder Title</Text>
               <TextInput
                 style={styles.textInput}
                 value={reminderData.title}
-                onChangeText={(text) => setReminderData(prev => ({ ...prev, title: text }))}
+                onChangeText={(text) =>
+                  setReminderData((prev) => ({ ...prev, title: text }))
+                }
                 placeholder="What should we remind you about?"
                 placeholderTextColor="#9CA3AF"
               />
@@ -229,7 +340,9 @@ export default function NoteDetailScreen() {
               <TextInput
                 style={[styles.textInput, styles.textArea]}
                 value={reminderData.description}
-                onChangeText={(text) => setReminderData(prev => ({ ...prev, description: text }))}
+                onChangeText={(text) =>
+                  setReminderData((prev) => ({ ...prev, description: text }))
+                }
                 placeholder="Additional details..."
                 placeholderTextColor="#9CA3AF"
                 multiline
@@ -249,14 +362,17 @@ export default function NoteDetailScreen() {
                     {reminderData.dateTime.toLocaleDateString()}
                   </Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   style={styles.dateTimeButton}
                   onPress={() => setShowTimePicker(true)}
                 >
                   <Bell size={20} color="#6B7280" strokeWidth={2} />
                   <Text style={styles.dateTimeText}>
-                    {reminderData.dateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {reminderData.dateTime.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -270,14 +386,20 @@ export default function NoteDetailScreen() {
                     key={priority}
                     style={[
                       styles.priorityButton,
-                      reminderData.priority === priority && styles.priorityButtonActive
+                      reminderData.priority === priority &&
+                        styles.priorityButtonActive,
                     ]}
-                    onPress={() => setReminderData(prev => ({ ...prev, priority }))}
+                    onPress={() =>
+                      setReminderData((prev) => ({ ...prev, priority }))
+                    }
                   >
-                    <Text style={[
-                      styles.priorityText,
-                      reminderData.priority === priority && styles.priorityTextActive
-                    ]}>
+                    <Text
+                      style={[
+                        styles.priorityText,
+                        reminderData.priority === priority &&
+                          styles.priorityTextActive,
+                      ]}
+                    >
                       {priority.charAt(0).toUpperCase() + priority.slice(1)}
                     </Text>
                   </TouchableOpacity>
@@ -286,7 +408,10 @@ export default function NoteDetailScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.setReminderButton, loading && styles.buttonDisabled]}
+              style={[
+                styles.setReminderButton,
+                loading && styles.buttonDisabled,
+              ]}
               onPress={handleSetReminder}
               disabled={loading}
             >
@@ -543,5 +668,45 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6,
+  },
+  fileSection: {
+    marginBottom: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  imageContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+  },
+  attachedImage: {
+    width: '100%',
+    height: 300,
+    backgroundColor: '#F3F4F6',
+  },
+  fileAttachment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  fileAttachmentInfo: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  fileAttachmentName: {
+    fontSize: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  fileAttachmentType: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#B45309',
   },
 });

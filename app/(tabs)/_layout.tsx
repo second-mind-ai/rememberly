@@ -1,38 +1,42 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Home, Search, Bell, Plus, FolderOpen, Brain } from 'lucide-react-native';
+import { Home, Search, Bell, Plus, FolderOpen } from 'lucide-react-native';
 import { Platform, Dimensions } from 'react-native';
 
-const { height: screenHeight } = Dimensions.get('window');
+const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
-// Calculate appropriate bottom padding based on device
-const getBottomPadding = () => {
-  if (Platform.OS === 'ios') {
-    return 20; // iOS safe area
-  }
-  
-  // Android - proper bottom padding for gesture navigation
-  if (screenHeight > 800) {
-    return 24; // Larger Android devices
-  } else if (screenHeight > 700) {
-    return 22; // Medium Android devices (like Galaxy Note 9) - increased for gestures
-  } else {
-    return 20; // Smaller Android devices
-  }
+// Enhanced styling configuration
+const TAB_CONFIG = {
+  colors: {
+    primary: '#3B82F6', // Modern blue
+    primaryDark: '#1E40AF',
+    secondary: '#6B7280',
+    background: '#FFFFFF',
+    border: '#F3F4F6',
+    shadow: '#000000',
+    inactive: '#9CA3AF',
+  },
+  spacing: {
+    horizontal: 16,
+    vertical: 8,
+    iconLabel: 4,
+  },
+  borderRadius: 16,
+  elevation: 8,
 };
 
+// Simplified responsive calculations
 const getTabBarHeight = () => {
   if (Platform.OS === 'ios') {
-    return 88;
+    return screenHeight > 800 ? 90 : 85;
   }
-  
-  // Android - balanced height for proper text display
-  if (screenHeight > 800) {
-    return 76;
-  } else if (screenHeight > 700) {
-    return 74; // Galaxy Note 9 - balanced for text visibility
-  } else {
-    return 72;
+  return screenHeight > 700 ? 75 : 70;
+};
+
+const getSafeAreaPadding = () => {
+  if (Platform.OS === 'ios') {
+    return screenHeight > 800 ? 25 : 20; // Handle different iPhone sizes
   }
+  return 16; // Android
 };
 
 export default function TabLayout() {
@@ -40,95 +44,153 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#2563EB',
-        tabBarInactiveTintColor: '#6B7280',
+        tabBarActiveTintColor: TAB_CONFIG.colors.primary,
+        tabBarInactiveTintColor: TAB_CONFIG.colors.inactive,
         tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#E5E7EB',
-          paddingBottom: getBottomPadding(),
-          paddingTop: 12, // Reduced top padding to give more space for text
+          backgroundColor: TAB_CONFIG.colors.background,
+          borderTopColor: TAB_CONFIG.colors.border,
+          borderTopWidth: 0.5,
+          paddingBottom: getSafeAreaPadding(),
+          paddingTop: TAB_CONFIG.spacing.vertical + 4,
           height: getTabBarHeight(),
-          borderTopWidth: 1,
-          elevation: 12,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -3 },
-          shadowOpacity: 0.12,
-          shadowRadius: 12,
-          // Ensure proper spacing from screen edges
-          marginHorizontal: 0,
-          paddingHorizontal: 8, // Reduced horizontal padding
+          paddingHorizontal: TAB_CONFIG.spacing.horizontal,
+
+          // Modern shadow and elevation
+          ...Platform.select({
+            ios: {
+              shadowColor: TAB_CONFIG.colors.shadow,
+              shadowOffset: { width: 0, height: -2 },
+              shadowOpacity: 0.1,
+              shadowRadius: 8,
+            },
+            android: {
+              elevation: TAB_CONFIG.elevation,
+            },
+          }),
+
+          // Subtle border radius for modern look
+          borderTopLeftRadius: TAB_CONFIG.borderRadius,
+          borderTopRightRadius: TAB_CONFIG.borderRadius,
         },
+
         tabBarLabelStyle: {
-          fontFamily: 'Inter-Medium',
-          fontSize: 12, // Standard font size
-          marginTop: 4, // Reduced spacing between icon and label
-          marginBottom: 2, // Small bottom margin for text
-          lineHeight: 14, // Tighter line height
+          fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto-Medium',
+          fontSize: 11,
+          fontWeight: '600',
+          marginTop: TAB_CONFIG.spacing.iconLabel,
+          marginBottom: 2,
+          letterSpacing: 0.3,
         },
+
         tabBarIconStyle: {
-          marginTop: 4, // Reduced top margin for icons
-          marginBottom: 0, // No bottom margin
+          marginTop: 2,
+          marginBottom: 0,
         },
-        // Improve touch area and text positioning
+
         tabBarItemStyle: {
-          paddingVertical: 4, // Reduced vertical padding
-          paddingHorizontal: 2, // Minimal horizontal padding
+          paddingVertical: TAB_CONFIG.spacing.vertical,
+          paddingHorizontal: 4,
           justifyContent: 'center',
           alignItems: 'center',
-          flex: 1,
+          borderRadius: 12,
+          marginHorizontal: 2,
+          // Add subtle background for active state
+          backgroundColor: 'transparent',
         },
-        // Better active indicator
-        tabBarIndicatorStyle: {
-          backgroundColor: '#2563EB',
-          height: 3,
-        },
-        // Ensure labels are always visible
+
+        // Enhanced accessibility
+        tabBarAccessibilityLabel: 'Navigation Tabs',
+        tabBarAllowFontScaling: false,
+        tabBarHideOnKeyboard: Platform.OS === 'android',
+
+        // Better label positioning
         tabBarLabelPosition: 'below-icon',
-        tabBarAllowFontScaling: false, // Prevent system font scaling issues
-      }}>
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ size, color }) => (
-            <Home size={size} color={color} strokeWidth={2} />
+          tabBarIcon: ({ size, color, focused }) => (
+            <Home
+              size={focused ? size + 2 : size}
+              color={color}
+              strokeWidth={focused ? 2.5 : 2}
+              fill={focused ? `${color}20` : 'transparent'}
+            />
           ),
+          tabBarAccessibilityLabel: 'Home Tab',
         }}
       />
+
       <Tabs.Screen
         name="explore"
         options={{
-          title: 'Notes',
-          tabBarIcon: ({ size, color }) => (
-            <Search size={size} color={color} strokeWidth={2} />
+          title: 'Explore',
+          tabBarIcon: ({ size, color, focused }) => (
+            <Search
+              size={focused ? size + 2 : size}
+              color={color}
+              strokeWidth={focused ? 2.5 : 2}
+              fill={focused ? `${color}20` : 'transparent'}
+            />
           ),
+          tabBarAccessibilityLabel: 'Explore Notes Tab',
         }}
       />
-      <Tabs.Screen
-        name="categories"
-        options={{
-          title: 'Categories',
-          tabBarIcon: ({ size, color }) => (
-            <FolderOpen size={size} color={color} strokeWidth={2} />
-          ),
-        }}
-      />
+
       <Tabs.Screen
         name="create"
         options={{
           title: 'Create',
-          tabBarIcon: ({ size, color }) => (
-            <Plus size={size} color={color} strokeWidth={2} />
+          tabBarIcon: ({ size, color, focused }) => (
+            <Plus
+              size={focused ? size + 3 : size + 1}
+              color={focused ? TAB_CONFIG.colors.primaryDark : color}
+              strokeWidth={focused ? 3 : 2.5}
+              style={{
+                backgroundColor: focused
+                  ? `${TAB_CONFIG.colors.primary}15`
+                  : 'transparent',
+                borderRadius: 8,
+                padding: 2,
+              }}
+            />
           ),
+          tabBarAccessibilityLabel: 'Create New Note Tab',
         }}
       />
+
+      <Tabs.Screen
+        name="categories"
+        options={{
+          title: 'Categories',
+          tabBarIcon: ({ size, color, focused }) => (
+            <FolderOpen
+              size={focused ? size + 2 : size}
+              color={color}
+              strokeWidth={focused ? 2.5 : 2}
+              fill={focused ? `${color}20` : 'transparent'}
+            />
+          ),
+          tabBarAccessibilityLabel: 'Categories Tab',
+        }}
+      />
+
       <Tabs.Screen
         name="reminders"
         options={{
           title: 'Reminders',
-          tabBarIcon: ({ size, color }) => (
-            <Bell size={size} color={color} strokeWidth={2} />
+          tabBarIcon: ({ size, color, focused }) => (
+            <Bell
+              size={focused ? size + 2 : size}
+              color={color}
+              strokeWidth={focused ? 2.5 : 2}
+              fill={focused ? `${color}20` : 'transparent'}
+            />
           ),
+          tabBarAccessibilityLabel: 'Reminders Tab',
+          tabBarBadge: undefined, // Can be used for notification count
         }}
       />
     </Tabs>
