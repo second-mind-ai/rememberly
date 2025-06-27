@@ -10,13 +10,10 @@ Notifications.setNotificationHandler({
     
     return {
       shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: sound !== 'none',
       shouldSetBadge: true,
-      ...(Platform.OS === 'ios' && {
-        priority: priority === 'high' 
-          ? Notifications.IosNotificationPriority.HIGH 
-          : Notifications.IosNotificationPriority.DEFAULT,
-      }),
     };
   },
 });
@@ -83,10 +80,10 @@ export async function registerForPushNotificationsAsync(): Promise<{
       return { token, permission };
     }
 
-    // Check if device supports notifications
-    if (!Constants.isDevice) {
-      console.warn('Push notifications only work on physical devices');
-      return { token, permission };
+    // Note: Local notifications work in simulator, push notifications don't
+    const isSimulator = !Constants.isDevice;
+    if (isSimulator) {
+      console.warn('Push notifications only work on physical devices, but local notifications will work');
     }
 
     // Set up notification channels for Android first
@@ -122,8 +119,8 @@ export async function registerForPushNotificationsAsync(): Promise<{
     permission.granted = finalStatus === 'granted';
     permission.status = finalStatus;
     
-    // Get push token if permissions granted
-    if (permission.granted) {
+    // Get push token only if permissions granted and on real device
+    if (permission.granted && !isSimulator) {
       try {
         // Use project ID from expo config or constants
         const projectId = Constants.expoConfig?.extra?.eas?.projectId || 
@@ -145,6 +142,9 @@ export async function registerForPushNotificationsAsync(): Promise<{
         console.error('Error getting push token:', error);
         // Don't throw here, just log the error
       }
+    } else if (permission.granted && isSimulator) {
+      // For simulator, just set a placeholder token to indicate permissions are granted
+      token = 'simulator-local-notifications-enabled';
     }
   } catch (error) {
     console.error('Error in registerForPushNotificationsAsync:', error);
@@ -251,12 +251,7 @@ export async function scheduleLocalNotification(
       notificationContent.badge = badge;
     }
 
-    // iOS-specific properties
-    if (Platform.OS === 'ios') {
-      notificationContent.priority = data.priority === 'high' 
-        ? Notifications.IosNotificationPriority.HIGH 
-        : Notifications.IosNotificationPriority.DEFAULT;
-    }
+    // iOS-specific properties - priority setting removed as API changed
 
     // Android-specific properties
     if (Platform.OS === 'android') {
@@ -273,6 +268,7 @@ export async function scheduleLocalNotification(
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: notificationContent,
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: triggerDate,
       },
     });
@@ -313,6 +309,7 @@ async function scheduleRecurringNotification(
             },
           },
           trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
             date: new Date(currentDate), // Create new date object
           },
         });
@@ -576,24 +573,21 @@ export function initializeNotificationListeners() {
       }
     });
 
-    // Handle notification dropped (iOS only)
-    const droppedSubscription = Platform.OS === 'ios' 
-      ? Notifications.addNotificationDroppedListener(notification => {
-          try {
-            console.log('Notification dropped:', notification);
-          } catch (error) {
-            console.error('Error handling dropped notification:', error);
-          }
-        })
-      : null;
+    // Handle notification dropped (iOS only) - Remove this as it may not be available in current version
+    // const droppedSubscription = Platform.OS === 'ios' 
+    //   ? Notifications.addNotificationsDroppedListener?.((notification) => {
+    //       try {
+    //         console.log('Notification dropped:', notification);
+    //       } catch (error) {
+    //         console.error('Error handling dropped notification:', error);
+    //       }
+    //     })
+    //   : null;
 
     return () => {
       try {
         foregroundSubscription.remove();
         responseSubscription.remove();
-        if (droppedSubscription) {
-          droppedSubscription.remove();
-        }
       } catch (error) {
         console.error('Error removing notification listeners:', error);
       }
@@ -627,6 +621,38 @@ export async function testNotification(): Promise<void> {
     console.log('Test notification scheduled successfully');
   } catch (error) {
     console.error('Test notification failed:', error);
+    throw error;
+  }
+}
+
+// Test function - add this at the end of the file
+export async function testLocalNotificationWhenClosed(): Promise<void> {
+  try {
+    const { permission } = await registerForPushNotificationsAsync();
+    
+    if (!permission.granted) {
+      throw new Error('Notification permission not granted');
+    }
+
+    // Schedule a test notification for 10 seconds from now
+    await scheduleLocalNotification({
+      title: '🧪 Test: App Closed Notification',
+      body: 'This proves local notifications work when app is closed! Close the app now.',
+      triggerDate: new Date(Date.now() + 10000), // 10 seconds
+      data: {
+        id: 'test-closed-app',
+        type: 'custom',
+        priority: 'high',
+        metadata: {
+          test: true,
+          instruction: 'Close the app and wait for this notification'
+        }
+      },
+    });
+
+    console.log('✅ Test notification scheduled! Close the app now and wait 10 seconds.');
+  } catch (error) {
+    console.error('❌ Test notification failed:', error);
     throw error;
   }
 }

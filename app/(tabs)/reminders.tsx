@@ -15,7 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { getCurrentUser } from '@/lib/auth';
 import { useReminderStore } from '@/lib/reminderStore';
-import { registerForPushNotificationsAsync, formatReminderTime } from '@/lib/notifications';
+import { registerForPushNotificationsAsync, formatReminderTime, testLocalNotificationWhenClosed } from '@/lib/notifications';
+import { testSupabaseConnection } from '@/lib/supabase';
 import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2 } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
@@ -328,6 +329,49 @@ export default function RemindersScreen() {
               Enable notifications to receive reminders
             </Text>
           </TouchableOpacity>
+        )}
+
+        {/* Test Buttons */}
+        {hasPermission && (
+          <View style={styles.testContainer}>
+            <TouchableOpacity 
+              style={styles.testButton}
+              onPress={async () => {
+                try {
+                  await testLocalNotificationWhenClosed();
+                  Alert.alert(
+                    '🧪 Test Started!', 
+                    'Notification scheduled for 10 seconds.\n\nClose the app NOW and wait!',
+                    [{ text: 'Got it!' }]
+                  );
+                } catch (error) {
+                  Alert.alert('Test Failed', 'Could not schedule test notification');
+                }
+              }}
+            >
+              <Text style={styles.testButtonText}>🧪 Test Notifications</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.testButton, { backgroundColor: '#059669' }]}
+              onPress={async () => {
+                try {
+                  const result = await testSupabaseConnection();
+                  Alert.alert(
+                    result.success ? '✅ Connection Successful' : '❌ Connection Failed',
+                    result.success 
+                      ? 'Supabase is connected and working!'
+                      : `Error: ${result.error}`,
+                    [{ text: 'OK' }]
+                  );
+                } catch (error) {
+                  Alert.alert('Connection Test Failed', 'Could not test Supabase connection');
+                }
+              }}
+            >
+              <Text style={styles.testButtonText}>🔗 Test Supabase</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -702,6 +746,24 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#DC2626',
     flex: 1,
+  },
+  testContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  testButton: {
+    flex: 1,
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  testButtonText: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#FFFFFF',
   },
   content: {
     flex: 1,

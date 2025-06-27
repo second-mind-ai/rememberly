@@ -194,21 +194,7 @@ export default function TabLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          title: 'Notifications',
-          tabBarIcon: ({ size, color, focused }) => (
-            <Settings
-              size={focused ? size + 2 : size}
-              color={color}
-              strokeWidth={focused ? 2.5 : 2}
-              fill={focused ? `${color}20` : 'transparent'}
-            />
-          ),
-          tabBarAccessibilityLabel: 'Notification Settings Tab',
-        }}
-      />
+
     </Tabs>
   );
 }
