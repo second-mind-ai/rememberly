@@ -13,20 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import {
-  Bell,
-  Plus,
-  Settings,
-  Trash2,
-  Calendar,
-  Clock,
-  Volume2,
-  VolumeX,
-  Repeat,
-  X,
-  Check,
-  AlertCircle,
-} from 'lucide-react-native';
+import { Bell, Plus, Settings, Trash2, Calendar, Clock, Volume2, VolumeX, Repeat, X, Check, CircleAlert as AlertCircle } from 'lucide-react-native';
 import {
   registerForPushNotificationsAsync,
   scheduleLocalNotification,
