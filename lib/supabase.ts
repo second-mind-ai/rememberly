@@ -104,3 +104,34 @@ export type Database = {
     };
   };
 };
+
+// Test Supabase connection - for debugging
+export const testSupabaseConnection = async () => {
+  try {
+    console.log('🧪 Testing Supabase connection...');
+    console.log('URL:', supabaseUrl);
+    console.log('Has valid config:', hasValidSupabaseConfig());
+    
+    if (!hasValidSupabaseConfig()) {
+      throw new Error('Invalid Supabase configuration');
+    }
+    
+    // Simple connection test
+    const { data, error } = await supabase.from('reminders').select('count', { count: 'exact', head: true });
+    
+    if (error) {
+      console.error('❌ Supabase connection failed:', error);
+      return { success: false, error: error.message };
+    }
+    
+    console.log('✅ Supabase connection successful');
+    return { success: true, data };
+    
+  } catch (error) {
+    console.error('❌ Supabase connection test failed:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+};

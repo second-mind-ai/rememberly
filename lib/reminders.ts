@@ -1,36 +1,14 @@
 import * as chrono from 'chrono-node';
-import * as Notifications from 'expo-notifications';
+import { 
+  scheduleLocalNotification, 
+  cancelNotification, 
+  registerForPushNotificationsAsync,
+  NotificationData,
+  ScheduleNotificationOptions 
+} from './notifications';
 import { Platform } from 'react-native';
 
-// Configure notifications
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
-
-export async function requestNotificationPermissions(): Promise<boolean> {
-  if (Platform.OS === 'web') {
-    // For web, check if browser supports notifications
-    if ('Notification' in window) {
-      const permission = await Notification.requestPermission();
-      return permission === 'granted';
-    }
-    return false;
-  }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  
-  return finalStatus === 'granted';
-}
+// Note: Notification handler is configured in lib/notifications.ts to avoid conflicts
 
 export function parseReminderTime(naturalInput: string): Date | null {
   try {
@@ -52,86 +30,56 @@ export async function scheduleNotification(
   priority: 'low' | 'medium' | 'high' = 'medium'
 ): Promise<string | null> {
   try {
-    if (Platform.OS === 'web') {
-      // Web notifications
-      if ('Notification' in window && Notification.permission === 'granted') {
-        const timeUntilTrigger = triggerDate.getTime() - Date.now();
-        if (timeUntilTrigger > 0) {
-          const timeoutId = setTimeout(() => {
-            new Notification(title, {
-              body,
-              icon: '/favicon.png',
-              badge: '/favicon.png',
-              tag: `reminder-${Date.now()}`,
-              requireInteraction: priority === 'high',
-            });
-          }, timeUntilTrigger);
-          return `web-${timeoutId}`;
-        }
-      }
-      return null;
+    // Validate inputs
+    if (!title || !body) {
+      throw new Error('Title and body are required');
     }
 
-    const hasPermission = await requestNotificationPermissions();
-    if (!hasPermission) {
+    if (triggerDate <= new Date()) {
+      throw new Error('Trigger date must be in the future');
+    }
+
+    // Check permissions first
+    const { permission } = await registerForPushNotificationsAsync();
+    if (!permission.granted) {
       throw new Error('Notification permission denied');
     }
 
-    // Configure notification sound based on priority
-    let sound: string | undefined;
-    let priority_android: Notifications.AndroidNotificationPriority;
-    
-    switch (priority) {
-      case 'high':
-        sound = 'default';
-        priority_android = Notifications.AndroidNotificationPriority.HIGH;
-        break;
-      case 'medium':
-        sound = 'default';
-        priority_android = Notifications.AndroidNotificationPriority.DEFAULT;
-        break;
-      case 'low':
-        sound = undefined;
-        priority_android = Notifications.AndroidNotificationPriority.LOW;
-        break;
-    }
+    // Create notification data
+    const notificationData: NotificationData = {
+      id: `reminder-${Date.now()}`,
+      type: 'reminder',
+      priority,
+      sound: priority === 'high' ? 'default' : 'default',
+      metadata: {
+        createdAt: new Date().toISOString(),
+        source: 'reminder'
+      }
+    };
 
-    const notificationId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        sound,
-        priority: priority === 'high' ? Notifications.IosNotificationPriority.HIGH : Notifications.IosNotificationPriority.DEFAULT,
-        data: { 
-          priority,
-          timestamp: triggerDate.toISOString(),
-        },
-      },
-      trigger: {
-        date: triggerDate,
-      },
-    });
+    // Schedule using the main notification service
+    const options: ScheduleNotificationOptions = {
+      title: title.substring(0, 100),
+      body: body.substring(0, 500),
+      triggerDate,
+      data: notificationData,
+      sound: priority === 'high' ? 'default' : 'default',
+      badge: 1
+    };
 
-    return notificationId;
+    return await scheduleLocalNotification(options);
   } catch (error) {
     console.error('Error scheduling notification:', error);
-    return null;
+    throw error;
   }
 }
 
-export async function cancelNotification(notificationId: string): Promise<void> {
+export async function cancelReminderNotification(notificationId: string): Promise<void> {
   try {
-    if (Platform.OS === 'web') {
-      if (notificationId.startsWith('web-')) {
-        const timeoutId = parseInt(notificationId.replace('web-', ''));
-        clearTimeout(timeoutId);
-      }
-      return;
-    }
-
-    await Notifications.cancelScheduledNotificationAsync(notificationId);
+    await cancelNotification(notificationId);
   } catch (error) {
-    console.error('Error canceling notification:', error);
+    console.error('Error canceling reminder notification:', error);
+    throw error;
   }
 }
 
@@ -162,21 +110,4 @@ export function formatReminderTime(date: Date): string {
   }
 }
 
-// Initialize notification listeners
-export function initializeNotificationListeners() {
-  // Handle notification received while app is in foreground
-  const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
-    console.log('Notification received in foreground:', notification);
-  });
-
-  // Handle notification response (user tapped notification)
-  const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-    console.log('Notification response:', response);
-    // You can navigate to specific screens based on notification data
-  });
-
-  return () => {
-    foregroundSubscription.remove();
-    responseSubscription.remove();
-  };
-}
+// Note: Notification listeners are initialized in lib/notifications.ts

@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Home, Search, Bell, Plus, FolderOpen } from 'lucide-react-native';
+import { Chrome as Home, Search, Bell, Plus, FolderOpen, Settings } from 'lucide-react-native';
 import { Platform, Dimensions } from 'react-native';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
@@ -193,6 +193,8 @@ export default function TabLayout() {
           tabBarBadge: undefined, // Can be used for notification count
         }}
       />
+
+
     </Tabs>
   );
 }
