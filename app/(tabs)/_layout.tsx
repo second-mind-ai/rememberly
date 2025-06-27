@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Chrome as Home, Search, Bell, Plus, FolderOpen, Settings } from 'lucide-react-native';
+import { Home, Search, Bell, Plus, FolderOpen, Settings } from 'lucide-react-native';
 import { Platform, Dimensions } from 'react-native';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');

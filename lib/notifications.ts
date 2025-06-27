@@ -53,7 +53,7 @@ export interface NotificationPermissionStatus {
   status: string;
 }
 
-// Enhanced permission management
+// Enhanced permission management with better error handling
 export async function registerForPushNotificationsAsync(): Promise<{
   token: string | null;
   permission: NotificationPermissionStatus;
@@ -65,44 +65,56 @@ export async function registerForPushNotificationsAsync(): Promise<{
     status: 'undetermined'
   };
 
-  if (Platform.OS === 'web') {
-    // Web notifications
-    if ('Notification' in window) {
-      const webPermission = await Notification.requestPermission();
-      permission = {
-        granted: webPermission === 'granted',
-        canAskAgain: webPermission === 'default',
-        status: webPermission
-      };
-      
-      if (permission.granted) {
-        token = 'web-notifications-enabled';
+  try {
+    if (Platform.OS === 'web') {
+      // Web notifications
+      if ('Notification' in window) {
+        const webPermission = await Notification.requestPermission();
+        permission = {
+          granted: webPermission === 'granted',
+          canAskAgain: webPermission === 'default',
+          status: webPermission
+        };
+        
+        if (permission.granted) {
+          token = 'web-notifications-enabled';
+        }
       }
+      return { token, permission };
     }
-    return { token, permission };
-  }
 
-  // Set up notification channels for Android
-  if (Platform.OS === 'android') {
-    await setupAndroidChannels();
-  }
+    // Check if device supports notifications
+    if (!Constants.isDevice) {
+      console.warn('Push notifications only work on physical devices');
+      return { token, permission };
+    }
 
-  if (Constants.isDevice) {
+    // Set up notification channels for Android first
+    if (Platform.OS === 'android') {
+      await setupAndroidChannels();
+    }
+
+    // Get existing permissions
     const { status: existingStatus, canAskAgain } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
     
     permission.status = existingStatus;
     permission.canAskAgain = canAskAgain;
     
+    // Request permissions if not granted
     if (existingStatus !== 'granted') {
-      const { status, canAskAgain: newCanAskAgain } = await Notifications.requestPermissionsAsync({
-        ios: {
-          allowAlert: true,
-          allowBadge: true,
-          allowSound: true,
-          allowAnnouncements: true,
-        },
-      });
+      const permissionRequest = Platform.OS === 'ios' 
+        ? {
+            ios: {
+              allowAlert: true,
+              allowBadge: true,
+              allowSound: true,
+              allowAnnouncements: true,
+            },
+          }
+        : {};
+
+      const { status, canAskAgain: newCanAskAgain } = await Notifications.requestPermissionsAsync(permissionRequest);
       finalStatus = status;
       permission.canAskAgain = newCanAskAgain;
     }
@@ -110,64 +122,87 @@ export async function registerForPushNotificationsAsync(): Promise<{
     permission.granted = finalStatus === 'granted';
     permission.status = finalStatus;
     
+    // Get push token if permissions granted
     if (permission.granted) {
       try {
-        const tokenData = await Notifications.getExpoPushTokenAsync({
-          projectId: Constants.expoConfig?.extra?.eas?.projectId,
-        });
-        token = tokenData.data;
+        // Use project ID from expo config or constants
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId || 
+                         Constants.easConfig?.projectId ||
+                         Constants.manifest?.extra?.eas?.projectId;
+
+        if (projectId) {
+          const tokenData = await Notifications.getExpoPushTokenAsync({
+            projectId: projectId,
+          });
+          token = tokenData.data;
+        } else {
+          // Fallback for development
+          console.warn('No project ID found, using development token');
+          const tokenData = await Notifications.getDevicePushTokenAsync();
+          token = tokenData.data;
+        }
       } catch (error) {
         console.error('Error getting push token:', error);
+        // Don't throw here, just log the error
       }
     }
-  } else {
-    console.warn('Must use physical device for Push Notifications');
+  } catch (error) {
+    console.error('Error in registerForPushNotificationsAsync:', error);
+    // Return default permission state on error
   }
 
   return { token, permission };
 }
 
 async function setupAndroidChannels(): Promise<void> {
-  // Default channel
-  await Notifications.setNotificationChannelAsync('default', {
-    name: 'Default',
-    importance: Notifications.AndroidImportance.DEFAULT,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#FF231F7C',
-    sound: 'default',
-  });
+  try {
+    // Default channel
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'Default Notifications',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#2563EB',
+      sound: 'default',
+      showBadge: true,
+    });
 
-  // High priority channel
-  await Notifications.setNotificationChannelAsync('high-priority', {
-    name: 'High Priority',
-    importance: Notifications.AndroidImportance.HIGH,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#FF231F7C',
-    sound: 'default',
-    enableLights: true,
-    enableVibrate: true,
-  });
+    // High priority channel
+    await Notifications.setNotificationChannelAsync('high-priority', {
+      name: 'High Priority Notifications',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#DC2626',
+      sound: 'default',
+      enableLights: true,
+      enableVibrate: true,
+      showBadge: true,
+    });
 
-  // Low priority channel
-  await Notifications.setNotificationChannelAsync('low-priority', {
-    name: 'Low Priority',
-    importance: Notifications.AndroidImportance.LOW,
-    vibrationPattern: [0, 100],
-    lightColor: '#FF231F7C',
-    sound: undefined,
-  });
+    // Low priority channel
+    await Notifications.setNotificationChannelAsync('low-priority', {
+      name: 'Low Priority Notifications',
+      importance: Notifications.AndroidImportance.LOW,
+      vibrationPattern: [0, 100],
+      lightColor: '#6B7280',
+      sound: undefined,
+      showBadge: false,
+    });
 
-  // Recurring notifications channel
-  await Notifications.setNotificationChannelAsync('recurring', {
-    name: 'Recurring Notifications',
-    importance: Notifications.AndroidImportance.DEFAULT,
-    vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#FF231F7C',
-    sound: 'default',
-  });
+    // Recurring notifications channel
+    await Notifications.setNotificationChannelAsync('recurring', {
+      name: 'Recurring Notifications',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#059669',
+      sound: 'default',
+      showBadge: true,
+    });
+  } catch (error) {
+    console.error('Error setting up Android channels:', error);
+  }
 }
 
-// Enhanced notification scheduling
+// Enhanced notification scheduling with better error handling
 export async function scheduleLocalNotification(
   options: ScheduleNotificationOptions
 ): Promise<string | null> {
@@ -178,6 +213,15 @@ export async function scheduleLocalNotification(
 
     const { title, body, triggerDate, data, sound = 'default', badge, recurring } = options;
     
+    // Validate inputs
+    if (!title || !body) {
+      throw new Error('Title and body are required');
+    }
+
+    if (triggerDate <= new Date()) {
+      throw new Error('Trigger date must be in the future');
+    }
+
     // Determine channel based on priority and type
     let channelId = 'default';
     if (Platform.OS === 'android') {
@@ -191,17 +235,21 @@ export async function scheduleLocalNotification(
     }
 
     const notificationContent: any = {
-      title,
-      body,
+      title: title.substring(0, 100), // Limit title length
+      body: body.substring(0, 500), // Limit body length
       data: {
         ...data,
         sound,
         scheduledAt: new Date().toISOString(),
       },
       sound: sound === 'none' ? false : (sound === 'default' ? 'default' : true),
-      badge,
       categoryIdentifier: data.type,
     };
+
+    // Add badge only if specified and valid
+    if (badge !== undefined && badge >= 0) {
+      notificationContent.badge = badge;
+    }
 
     // iOS-specific properties
     if (Platform.OS === 'ios') {
@@ -248,47 +296,53 @@ async function scheduleRecurringNotification(
   const maxNotifications = 50; // Limit to prevent too many scheduled notifications
   let count = 0;
 
-  while (count < maxNotifications) {
-    if (endDate && currentDate > endDate) {
-      break;
-    }
+  try {
+    while (count < maxNotifications) {
+      if (endDate && currentDate > endDate) {
+        break;
+      }
 
-    if (currentDate > new Date()) {
-      const notificationId = await Notifications.scheduleNotificationAsync({
-        content: {
-          ...content,
-          data: {
-            ...content.data,
-            recurringId: content.data.id,
-            occurrence: count + 1,
+      if (currentDate > new Date()) {
+        const notificationId = await Notifications.scheduleNotificationAsync({
+          content: {
+            ...content,
+            data: {
+              ...content.data,
+              recurringId: content.data.id,
+              occurrence: count + 1,
+            },
           },
-        },
-        trigger: {
-          date: currentDate,
-        },
-      });
-      
-      notificationIds.push(notificationId);
+          trigger: {
+            date: new Date(currentDate), // Create new date object
+          },
+        });
+        
+        notificationIds.push(notificationId);
+      }
+
+      // Calculate next occurrence
+      switch (frequency) {
+        case 'daily':
+          currentDate = new Date(currentDate.getTime() + (24 * 60 * 60 * 1000 * interval));
+          break;
+        case 'weekly':
+          currentDate = new Date(currentDate.getTime() + (7 * 24 * 60 * 60 * 1000 * interval));
+          break;
+        case 'monthly':
+          currentDate = new Date(currentDate);
+          currentDate.setMonth(currentDate.getMonth() + interval);
+          break;
+      }
+
+      count++;
     }
 
-    // Calculate next occurrence
-    switch (frequency) {
-      case 'daily':
-        currentDate.setDate(currentDate.getDate() + interval);
-        break;
-      case 'weekly':
-        currentDate.setDate(currentDate.getDate() + (7 * interval));
-        break;
-      case 'monthly':
-        currentDate.setMonth(currentDate.getMonth() + interval);
-        break;
-    }
-
-    count++;
+    // Return the first notification ID as the primary identifier
+    return notificationIds[0] || '';
+  } catch (error) {
+    console.error('Error scheduling recurring notifications:', error);
+    throw error;
   }
-
-  // Return the first notification ID as the primary identifier
-  return notificationIds[0] || '';
 }
 
 function scheduleWebNotification(options: ScheduleNotificationOptions): string | null {
@@ -296,7 +350,7 @@ function scheduleWebNotification(options: ScheduleNotificationOptions): string |
     return null;
   }
 
-  const { title, body, triggerDate, data, badge } = options;
+  const { title, body, triggerDate, data } = options;
   const timeUntilTrigger = triggerDate.getTime() - Date.now();
   
   if (timeUntilTrigger <= 0) {
@@ -326,13 +380,19 @@ function scheduleWebNotification(options: ScheduleNotificationOptions): string |
   return `web-${timeoutId}`;
 }
 
-// Enhanced notification management
+// Enhanced notification management with better error handling
 export async function cancelNotification(notificationId: string): Promise<void> {
   try {
+    if (!notificationId) {
+      throw new Error('Notification ID is required');
+    }
+
     if (Platform.OS === 'web') {
       if (notificationId.startsWith('web-') && !notificationId.includes('immediate')) {
         const timeoutId = parseInt(notificationId.replace('web-', ''));
-        clearTimeout(timeoutId);
+        if (!isNaN(timeoutId)) {
+          clearTimeout(timeoutId);
+        }
       }
       return;
     }
@@ -401,7 +461,9 @@ export async function updateNotificationBadge(count: number): Promise<void> {
       return;
     }
 
-    await Notifications.setBadgeCountAsync(count);
+    // Ensure count is a valid number
+    const badgeCount = Math.max(0, Math.floor(count));
+    await Notifications.setBadgeCountAsync(badgeCount);
   } catch (error) {
     console.error('Error updating badge count:', error);
   }
@@ -426,94 +488,120 @@ function getPriorityColor(priority: string): string {
 }
 
 export function formatReminderTime(date: Date): string {
-  const now = new Date();
-  const diffMs = date.getTime() - now.getTime();
-  const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  try {
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffMs < 0) {
-    const pastMinutes = Math.abs(diffMinutes);
-    const pastHours = Math.abs(diffHours);
-    const pastDays = Math.abs(diffDays);
-    
-    if (pastMinutes < 60) {
-      return `${pastMinutes} minute${pastMinutes !== 1 ? 's' : ''} ago`;
-    } else if (pastHours < 24) {
-      return `${pastHours} hour${pastHours !== 1 ? 's' : ''} ago`;
-    } else {
-      return `${pastDays} day${pastDays !== 1 ? 's' : ''} ago`;
+    if (diffMs < 0) {
+      const pastMinutes = Math.abs(diffMinutes);
+      const pastHours = Math.abs(diffHours);
+      const pastDays = Math.abs(diffDays);
+      
+      if (pastMinutes < 60) {
+        return `${pastMinutes} minute${pastMinutes !== 1 ? 's' : ''} ago`;
+      } else if (pastHours < 24) {
+        return `${pastHours} hour${pastHours !== 1 ? 's' : ''} ago`;
+      } else {
+        return `${pastDays} day${pastDays !== 1 ? 's' : ''} ago`;
+      }
     }
-  }
 
-  if (diffMinutes < 60) {
-    return `in ${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''}`;
-  } else if (diffHours < 24) {
-    return `in ${diffHours} hour${diffHours !== 1 ? 's' : ''}`;
-  } else if (diffDays < 7) {
-    return `in ${diffDays} day${diffDays !== 1 ? 's' : ''}`;
-  } else {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+    if (diffMinutes < 60) {
+      return `in ${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''}`;
+    } else if (diffHours < 24) {
+      return `in ${diffHours} hour${diffHours !== 1 ? 's' : ''}`;
+    } else if (diffDays < 7) {
+      return `in ${diffDays} day${diffDays !== 1 ? 's' : ''}`;
+    } else {
+      return date.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    }
+  } catch (error) {
+    console.error('Error formatting reminder time:', error);
+    return 'Invalid date';
   }
 }
 
-// Enhanced notification listeners
+// Enhanced notification listeners with better error handling
 export function initializeNotificationListeners() {
-  // Handle notification received while app is in foreground
-  const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
-    console.log('Notification received in foreground:', notification);
-    
-    // Handle badge updates
-    const badge = notification.request.content.badge;
-    if (badge !== undefined) {
-      updateNotificationBadge(badge);
-    }
-    
-    // Custom handling based on notification type
-    const data = notification.request.content.data as NotificationData;
-    if (data?.type === 'recurring') {
-      console.log('Recurring notification received:', data);
-    }
-  });
+  try {
+    // Handle notification received while app is in foreground
+    const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
+      try {
+        console.log('Notification received in foreground:', notification);
+        
+        // Handle badge updates
+        const badge = notification.request.content.badge;
+        if (badge !== undefined && typeof badge === 'number') {
+          updateNotificationBadge(badge);
+        }
+        
+        // Custom handling based on notification type
+        const data = notification.request.content.data as NotificationData;
+        if (data?.type === 'recurring') {
+          console.log('Recurring notification received:', data);
+        }
+      } catch (error) {
+        console.error('Error handling foreground notification:', error);
+      }
+    });
 
-  // Handle notification response (user tapped notification)
-  const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-    console.log('Notification response:', response);
-    const data = response.notification.request.content.data as NotificationData;
-    
-    // Clear badge when user interacts with notification
-    clearNotificationBadge();
-    
-    // Handle navigation based on notification data
-    if (data?.metadata?.noteId) {
-      console.log('Navigate to note:', data.metadata.noteId);
-      // You can use router.push here to navigate
-    } else if (data?.type === 'reminder') {
-      console.log('Navigate to reminders');
-      // Navigate to reminders screen
-    }
-  });
+    // Handle notification response (user tapped notification)
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
+      try {
+        console.log('Notification response:', response);
+        const data = response.notification.request.content.data as NotificationData;
+        
+        // Clear badge when user interacts with notification
+        clearNotificationBadge();
+        
+        // Handle navigation based on notification data
+        if (data?.metadata?.noteId) {
+          console.log('Navigate to note:', data.metadata.noteId);
+          // You can use router.push here to navigate
+        } else if (data?.type === 'reminder') {
+          console.log('Navigate to reminders');
+          // Navigate to reminders screen
+        }
+      } catch (error) {
+        console.error('Error handling notification response:', error);
+      }
+    });
 
-  // Handle notification dropped (iOS only)
-  const droppedSubscription = Platform.OS === 'ios' 
-    ? Notifications.addNotificationDroppedListener(notification => {
-        console.log('Notification dropped:', notification);
-      })
-    : null;
+    // Handle notification dropped (iOS only)
+    const droppedSubscription = Platform.OS === 'ios' 
+      ? Notifications.addNotificationDroppedListener(notification => {
+          try {
+            console.log('Notification dropped:', notification);
+          } catch (error) {
+            console.error('Error handling dropped notification:', error);
+          }
+        })
+      : null;
 
-  return () => {
-    foregroundSubscription.remove();
-    responseSubscription.remove();
-    if (droppedSubscription) {
-      droppedSubscription.remove();
-    }
-  };
+    return () => {
+      try {
+        foregroundSubscription.remove();
+        responseSubscription.remove();
+        if (droppedSubscription) {
+          droppedSubscription.remove();
+        }
+      } catch (error) {
+        console.error('Error removing notification listeners:', error);
+      }
+    };
+  } catch (error) {
+    console.error('Error initializing notification listeners:', error);
+    return () => {}; // Return empty cleanup function
+  }
 }
 
 // Notification testing utilities (for development)

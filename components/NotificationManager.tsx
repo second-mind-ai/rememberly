@@ -10,6 +10,7 @@ import {
   Modal,
   TextInput,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -53,6 +54,7 @@ export default function NotificationManager() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [badgeCount, setBadgeCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState<NotificationItem>({
@@ -76,6 +78,8 @@ export default function NotificationManager() {
   async function initializeNotifications() {
     try {
       setLoading(true);
+      setError(null);
+      
       const { permission: permissionStatus } = await registerForPushNotificationsAsync();
       setPermission(permissionStatus);
       
@@ -84,7 +88,7 @@ export default function NotificationManager() {
       }
     } catch (error) {
       console.error('Failed to initialize notifications:', error);
-      Alert.alert('Error', 'Failed to initialize notification system');
+      setError('Failed to initialize notification system');
     } finally {
       setLoading(false);
     }
@@ -96,11 +100,15 @@ export default function NotificationManager() {
       setNotifications(scheduled);
     } catch (error) {
       console.error('Failed to load notifications:', error);
+      setError('Failed to load scheduled notifications');
     }
   }
 
   async function requestPermissions() {
     try {
+      setLoading(true);
+      setError(null);
+      
       const { permission: newPermission } = await registerForPushNotificationsAsync();
       setPermission(newPermission);
       
@@ -114,7 +122,10 @@ export default function NotificationManager() {
         );
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to request notification permissions');
+      console.error('Failed to request permissions:', error);
+      setError('Failed to request notification permissions');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -131,6 +142,7 @@ export default function NotificationManager() {
 
     try {
       setLoading(true);
+      setError(null);
 
       const notificationData: NotificationData = {
         id: `notification-${Date.now()}`,
@@ -143,8 +155,8 @@ export default function NotificationManager() {
       };
 
       const options: ScheduleNotificationOptions = {
-        title: formData.title,
-        body: formData.body,
+        title: formData.title.trim(),
+        body: formData.body.trim(),
         triggerDate: formData.triggerDate,
         data: notificationData,
         sound: formData.sound,
@@ -173,7 +185,9 @@ export default function NotificationManager() {
       Alert.alert('Success', 'Notification scheduled successfully!');
     } catch (error) {
       console.error('Failed to create notification:', error);
-      Alert.alert('Error', 'Failed to schedule notification');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to schedule notification';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -181,12 +195,15 @@ export default function NotificationManager() {
 
   async function handleCancelNotification(notificationId: string) {
     try {
+      setError(null);
       await cancelNotification(notificationId);
       await loadScheduledNotifications();
       Alert.alert('Success', 'Notification cancelled');
     } catch (error) {
       console.error('Failed to cancel notification:', error);
-      Alert.alert('Error', 'Failed to cancel notification');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to cancel notification';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
     }
   }
 
@@ -201,11 +218,15 @@ export default function NotificationManager() {
           style: 'destructive',
           onPress: async () => {
             try {
+              setError(null);
               await cancelAllNotifications();
               await loadScheduledNotifications();
               Alert.alert('Success', 'All notifications cancelled');
             } catch (error) {
-              Alert.alert('Error', 'Failed to cancel notifications');
+              console.error('Failed to cancel all notifications:', error);
+              const errorMessage = error instanceof Error ? error.message : 'Failed to cancel notifications';
+              setError(errorMessage);
+              Alert.alert('Error', errorMessage);
             }
           },
         },
@@ -215,29 +236,41 @@ export default function NotificationManager() {
 
   async function handleTestNotification() {
     try {
+      setError(null);
       await testNotification();
       Alert.alert('Success', 'Test notification scheduled for 5 seconds from now');
     } catch (error) {
-      Alert.alert('Error', 'Failed to schedule test notification');
+      console.error('Failed to test notification:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to schedule test notification';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
     }
   }
 
   async function handleUpdateBadge() {
     try {
+      setError(null);
       await updateNotificationBadge(badgeCount);
       Alert.alert('Success', `Badge count updated to ${badgeCount}`);
     } catch (error) {
-      Alert.alert('Error', 'Failed to update badge count');
+      console.error('Failed to update badge:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update badge count';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
     }
   }
 
   async function handleClearBadge() {
     try {
+      setError(null);
       await clearNotificationBadge();
       setBadgeCount(0);
       Alert.alert('Success', 'Badge cleared');
     } catch (error) {
-      Alert.alert('Error', 'Failed to clear badge');
+      console.error('Failed to clear badge:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to clear badge';
+      setError(errorMessage);
+      Alert.alert('Error', errorMessage);
     }
   }
 
@@ -277,16 +310,28 @@ export default function NotificationManager() {
           <Text style={styles.permissionText}>
             To use notifications, please grant permission to send notifications.
           </Text>
+          
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
+          
           <TouchableOpacity
-            style={styles.permissionButton}
+            style={[styles.permissionButton, loading && styles.buttonDisabled]}
             onPress={requestPermissions}
-            disabled={!permission.canAskAgain}
+            disabled={loading || !permission.canAskAgain}
           >
-            <Bell size={20} color="#ffffff" strokeWidth={2} />
+            {loading ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Bell size={20} color="#ffffff" strokeWidth={2} />
+            )}
             <Text style={styles.permissionButtonText}>
-              {permission.canAskAgain ? 'Grant Permission' : 'Open Settings'}
+              {loading ? 'Requesting...' : (permission.canAskAgain ? 'Grant Permission' : 'Open Settings')}
             </Text>
           </TouchableOpacity>
+          
           {!permission.canAskAgain && (
             <Text style={styles.settingsHint}>
               Please enable notifications in your device settings
@@ -305,17 +350,33 @@ export default function NotificationManager() {
           <TouchableOpacity
             style={styles.headerButton}
             onPress={handleTestNotification}
+            disabled={loading}
           >
-            <Settings size={20} color="#6B7280" strokeWidth={2} />
+            {loading ? (
+              <ActivityIndicator size="small" color="#6B7280" />
+            ) : (
+              <Settings size={20} color="#6B7280" strokeWidth={2} />
+            )}
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.addButton}
+            style={[styles.addButton, loading && styles.buttonDisabled]}
             onPress={() => setShowCreateModal(true)}
+            disabled={loading}
           >
             <Plus size={20} color="#ffffff" strokeWidth={2} />
           </TouchableOpacity>
         </View>
       </View>
+
+      {error && (
+        <View style={styles.errorBanner}>
+          <AlertCircle size={16} color="#DC2626" strokeWidth={2} />
+          <Text style={styles.errorBannerText}>{error}</Text>
+          <TouchableOpacity onPress={() => setError(null)}>
+            <X size={16} color="#DC2626" strokeWidth={2} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Badge Management */}
       <View style={styles.badgeSection}>
@@ -326,15 +387,27 @@ export default function NotificationManager() {
             <TextInput
               style={styles.badgeTextInput}
               value={badgeCount.toString()}
-              onChangeText={(text) => setBadgeCount(parseInt(text) || 0)}
+              onChangeText={(text) => {
+                const num = parseInt(text) || 0;
+                setBadgeCount(Math.max(0, num));
+              }}
               keyboardType="numeric"
               placeholder="0"
+              maxLength={3}
             />
           </View>
-          <TouchableOpacity style={styles.badgeButton} onPress={handleUpdateBadge}>
+          <TouchableOpacity 
+            style={[styles.badgeButton, loading && styles.buttonDisabled]} 
+            onPress={handleUpdateBadge}
+            disabled={loading}
+          >
             <Text style={styles.badgeButtonText}>Update</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.badgeButton} onPress={handleClearBadge}>
+          <TouchableOpacity 
+            style={[styles.badgeButton, loading && styles.buttonDisabled]} 
+            onPress={handleClearBadge}
+            disabled={loading}
+          >
             <Text style={styles.badgeButtonText}>Clear</Text>
           </TouchableOpacity>
         </View>
@@ -350,6 +423,7 @@ export default function NotificationManager() {
             <TouchableOpacity
               style={styles.clearAllButton}
               onPress={handleCancelAllNotifications}
+              disabled={loading}
             >
               <Trash2 size={16} color="#DC2626" strokeWidth={2} />
               <Text style={styles.clearAllText}>Clear All</Text>
@@ -357,8 +431,13 @@ export default function NotificationManager() {
           )}
         </View>
 
-        <ScrollView style={styles.notificationsList}>
-          {notifications.length === 0 ? (
+        <ScrollView style={styles.notificationsList} showsVerticalScrollIndicator={false}>
+          {loading && notifications.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#2563EB" />
+              <Text style={styles.loadingText}>Loading notifications...</Text>
+            </View>
+          ) : notifications.length === 0 ? (
             <View style={styles.emptyState}>
               <Bell size={48} color="#9CA3AF" strokeWidth={2} />
               <Text style={styles.emptyTitle}>No Scheduled Notifications</Text>
@@ -373,6 +452,7 @@ export default function NotificationManager() {
                 notification={notification}
                 onCancel={handleCancelNotification}
                 priorityColors={priorityColors}
+                disabled={loading}
               />
             ))
           )}
@@ -391,20 +471,25 @@ export default function NotificationManager() {
             <TouchableOpacity
               onPress={() => setShowCreateModal(false)}
               style={styles.modalCloseButton}
+              disabled={loading}
             >
               <X size={24} color="#6B7280" strokeWidth={2} />
             </TouchableOpacity>
             <Text style={styles.modalTitle}>Create Notification</Text>
             <TouchableOpacity
               onPress={handleCreateNotification}
-              style={styles.modalSaveButton}
+              style={[styles.modalSaveButton, loading && styles.buttonDisabled]}
               disabled={loading}
             >
-              <Check size={24} color="#059669" strokeWidth={2} />
+              {loading ? (
+                <ActivityIndicator size="small" color="#059669" />
+              ) : (
+                <Check size={24} color="#059669" strokeWidth={2} />
+              )}
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalContent}>
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Title *</Text>
               <TextInput
@@ -414,6 +499,7 @@ export default function NotificationManager() {
                 placeholder="Notification title"
                 placeholderTextColor="#9CA3AF"
                 maxLength={100}
+                editable={!loading}
               />
             </View>
 
@@ -428,6 +514,8 @@ export default function NotificationManager() {
                 multiline
                 numberOfLines={3}
                 maxLength={500}
+                textAlignVertical="top"
+                editable={!loading}
               />
             </View>
 
@@ -435,8 +523,9 @@ export default function NotificationManager() {
               <Text style={styles.inputLabel}>Date & Time</Text>
               <View style={styles.dateTimeContainer}>
                 <TouchableOpacity
-                  style={styles.dateTimeButton}
+                  style={[styles.dateTimeButton, loading && styles.buttonDisabled]}
                   onPress={() => setShowDatePicker(true)}
+                  disabled={loading}
                 >
                   <Calendar size={20} color="#6B7280" strokeWidth={2} />
                   <Text style={styles.dateTimeText}>
@@ -445,8 +534,9 @@ export default function NotificationManager() {
                 </TouchableOpacity>
                 
                 <TouchableOpacity
-                  style={styles.dateTimeButton}
+                  style={[styles.dateTimeButton, loading && styles.buttonDisabled]}
                   onPress={() => setShowTimePicker(true)}
+                  disabled={loading}
                 >
                   <Clock size={20} color="#6B7280" strokeWidth={2} />
                   <Text style={styles.dateTimeText}>
@@ -465,9 +555,11 @@ export default function NotificationManager() {
                     style={[
                       styles.priorityButton,
                       formData.priority === priority && styles.priorityButtonActive,
-                      { borderColor: priorityColors[priority].border }
+                      { borderColor: priorityColors[priority].border },
+                      loading && styles.buttonDisabled
                     ]}
                     onPress={() => setFormData(prev => ({ ...prev, priority }))}
+                    disabled={loading}
                   >
                     <Text style={[
                       styles.priorityText,
@@ -488,9 +580,11 @@ export default function NotificationManager() {
                     key={sound}
                     style={[
                       styles.soundButton,
-                      formData.sound === sound && styles.soundButtonActive
+                      formData.sound === sound && styles.soundButtonActive,
+                      loading && styles.buttonDisabled
                     ]}
                     onPress={() => setFormData(prev => ({ ...prev, sound }))}
+                    disabled={loading}
                   >
                     {sound === 'default' ? (
                       <Volume2 size={16} color={formData.sound === sound ? "#ffffff" : "#6B7280"} strokeWidth={2} />
@@ -516,6 +610,7 @@ export default function NotificationManager() {
                   onValueChange={setIsRecurring}
                   trackColor={{ false: '#E5E7EB', true: '#2563EB' }}
                   thumbColor={isRecurring ? '#ffffff' : '#ffffff'}
+                  disabled={loading}
                 />
               </View>
               
@@ -528,12 +623,14 @@ export default function NotificationManager() {
                         key={frequency}
                         style={[
                           styles.frequencyButton,
-                          formData.recurring?.frequency === frequency && styles.frequencyButtonActive
+                          formData.recurring?.frequency === frequency && styles.frequencyButtonActive,
+                          loading && styles.buttonDisabled
                         ]}
                         onPress={() => setFormData(prev => ({
                           ...prev,
                           recurring: { frequency, interval: 1 }
                         }))}
+                        disabled={loading}
                       >
                         <Text style={[
                           styles.frequencyText,
@@ -553,13 +650,18 @@ export default function NotificationManager() {
               <TextInput
                 style={styles.textInput}
                 value={formData.badge?.toString() || ''}
-                onChangeText={(text) => setFormData(prev => ({ 
-                  ...prev, 
-                  badge: parseInt(text) || undefined 
-                }))}
+                onChangeText={(text) => {
+                  const num = parseInt(text) || undefined;
+                  setFormData(prev => ({ 
+                    ...prev, 
+                    badge: num !== undefined ? Math.max(0, num) : undefined 
+                  }));
+                }}
                 placeholder="1"
                 placeholderTextColor="#9CA3AF"
                 keyboardType="numeric"
+                maxLength={3}
+                editable={!loading}
               />
             </View>
           </ScrollView>
@@ -592,29 +694,41 @@ interface NotificationCardProps {
   notification: Notifications.NotificationRequest;
   onCancel: (id: string) => void;
   priorityColors: any;
+  disabled?: boolean;
 }
 
-function NotificationCard({ notification, onCancel, priorityColors }: NotificationCardProps) {
+function NotificationCard({ notification, onCancel, priorityColors, disabled = false }: NotificationCardProps) {
   const data = notification.content.data as NotificationData;
   const priority = data?.priority || 'medium';
-  const triggerDate = notification.trigger && 'date' in notification.trigger 
-    ? new Date(notification.trigger.date as number)
-    : new Date();
+  
+  // Safely handle trigger date
+  let triggerDate: Date;
+  try {
+    if (notification.trigger && 'date' in notification.trigger) {
+      triggerDate = new Date(notification.trigger.date as number);
+    } else {
+      triggerDate = new Date();
+    }
+  } catch (error) {
+    console.error('Error parsing trigger date:', error);
+    triggerDate = new Date();
+  }
 
   return (
     <View style={[styles.notificationCard, { borderLeftColor: priorityColors[priority].text }]}>
       <View style={styles.notificationHeader}>
         <View style={styles.notificationInfo}>
           <Text style={styles.notificationTitle} numberOfLines={1}>
-            {notification.content.title}
+            {notification.content.title || 'Untitled'}
           </Text>
           <Text style={styles.notificationBody} numberOfLines={2}>
-            {notification.content.body}
+            {notification.content.body || 'No message'}
           </Text>
         </View>
         <TouchableOpacity
-          style={styles.cancelButton}
+          style={[styles.cancelButton, disabled && styles.buttonDisabled]}
           onPress={() => onCancel(notification.identifier)}
+          disabled={disabled}
         >
           <Trash2 size={16} color="#DC2626" strokeWidth={2} />
         </TouchableOpacity>
@@ -702,6 +816,41 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  errorContainer: {
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginVertical: 8,
+  },
+  errorText: {
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#DC2626',
+    textAlign: 'center',
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    marginHorizontal: 20,
+    marginVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    gap: 8,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter-Medium',
+    color: '#DC2626',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -732,6 +881,16 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: 'Inter-Regular',
+    color: '#6B7280',
   },
   badgeSection: {
     backgroundColor: '#ffffff',
