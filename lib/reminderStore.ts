@@ -96,19 +96,27 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       if (error) throw error;
 
-      // Schedule local notification
+      // Schedule local notification with enhanced data
       const notificationData: NotificationData = {
-        reminderId: newReminder.id,
-        noteId: newReminder.note_id || undefined,
+        id: newReminder.id,
+        type: 'reminder',
         priority: newReminder.priority,
+        sound: newReminder.priority === 'high' ? 'default' : 'default',
+        metadata: {
+          reminderId: newReminder.id,
+          noteId: newReminder.note_id,
+          createdAt: newReminder.created_at,
+        },
       };
 
-      const notificationId = await scheduleLocalNotification(
-        newReminder.title,
-        newReminder.description || 'Reminder notification',
-        new Date(newReminder.remind_at),
-        notificationData
-      );
+      const notificationId = await scheduleLocalNotification({
+        title: newReminder.title,
+        body: newReminder.description || 'Reminder notification',
+        triggerDate: new Date(newReminder.remind_at),
+        data: notificationData,
+        sound: newReminder.priority === 'high' ? 'default' : 'default',
+        badge: 1,
+      });
 
       // Update reminder with notification ID
       if (notificationId) {
@@ -208,19 +216,28 @@ export const useReminderStore = create<ReminderStore>((set, get) => ({
 
       const newRemindAt = new Date(Date.now() + minutes * 60 * 1000).toISOString();
 
-      // Schedule new notification
+      // Schedule new notification with enhanced data
       const notificationData: NotificationData = {
-        reminderId: reminder.id,
-        noteId: reminder.note_id || undefined,
+        id: reminder.id,
+        type: 'reminder',
         priority: reminder.priority,
+        sound: reminder.priority === 'high' ? 'default' : 'default',
+        metadata: {
+          reminderId: reminder.id,
+          noteId: reminder.note_id,
+          snoozedAt: new Date().toISOString(),
+          originalTime: reminder.remind_at,
+        },
       };
 
-      const notificationId = await scheduleLocalNotification(
-        reminder.title,
-        reminder.description || 'Reminder notification',
-        new Date(newRemindAt),
-        notificationData
-      );
+      const notificationId = await scheduleLocalNotification({
+        title: reminder.title,
+        body: reminder.description || 'Reminder notification (snoozed)',
+        triggerDate: new Date(newRemindAt),
+        data: notificationData,
+        sound: reminder.priority === 'high' ? 'default' : 'default',
+        badge: 1,
+      });
 
       // Update reminder in database
       const { error } = await supabase

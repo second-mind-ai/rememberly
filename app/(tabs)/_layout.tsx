@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Home, Search, Bell, Plus, FolderOpen } from 'lucide-react-native';
+import { Home, Search, Bell, Plus, FolderOpen, Settings } from 'lucide-react-native';
 import { Platform, Dimensions } from 'react-native';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
@@ -191,6 +191,22 @@ export default function TabLayout() {
           ),
           tabBarAccessibilityLabel: 'Reminders Tab',
           tabBarBadge: undefined, // Can be used for notification count
+        }}
+      />
+
+      <Tabs.Screen
+        name="notifications"
+        options={{
+          title: 'Notifications',
+          tabBarIcon: ({ size, color, focused }) => (
+            <Settings
+              size={focused ? size + 2 : size}
+              color={color}
+              strokeWidth={focused ? 2.5 : 2}
+              fill={focused ? `${color}20` : 'transparent'}
+            />
+          ),
+          tabBarAccessibilityLabel: 'Notification Settings Tab',
         }}
       />
     </Tabs>
