@@ -127,6 +127,9 @@ Requirements:
       });
     }
 
+    // Use gpt-4o for images (vision capabilities), gpt-4o-mini for text/URLs (cost-effective)
+    const model = (type === 'image' && imageUrl) ? 'gpt-4o' : 'gpt-4o-mini';
+
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
@@ -134,7 +137,7 @@ Requirements:
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o', // Use gpt-4o for vision capabilities
+        model: model,
         messages: messages,
         max_tokens: 500,
         temperature: 0.3,
