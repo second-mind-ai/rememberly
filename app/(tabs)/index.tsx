@@ -13,15 +13,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNotesStore } from '@/lib/store';
 import { useGuestMode } from '@/lib/guestContext';
 import { getCurrentUser, signOut } from '@/lib/auth';
-import { Brain, Plus, FileText, Link2, Image, LogOut } from 'lucide-react-native';
+import { Brain, Plus, FileText, Link2, Image, LogOut, User } from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
 import { theme } from '@/lib/theme';
 import { GuestBadge } from '@/components/GuestBadge';
 import { SignUpPopup } from '@/components/SignUpPopup';
 
 export default function HomeScreen() {
-  const { notes, loading, fetchNotes, error, isGuestMode } = useNotesStore();
-  const { guestUsage, loading: guestLoading } = useGuestMode();
+  const { notes, loading, fetchNotes, error } = useNotesStore();
+  const { isGuestMode, guestUsage, loading: guestLoading } = useGuestMode();
   const [user, setUser] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [showSignUpPopup, setShowSignUpPopup] = useState(false);
@@ -94,7 +94,7 @@ export default function HomeScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <View>
+          <View style={styles.headerContent}>
             <Text style={styles.greeting}>
               {isGuestMode ? 'Welcome to Rememberly!' : 'Welcome back!'}
             </Text>
@@ -103,15 +103,22 @@ export default function HomeScreen() {
             </Text>
           </View>
           <View style={styles.headerActions}>
-            {isGuestMode && (
-              <GuestBadge
-                notesUsed={guestUsage.notes}
-                maxNotes={guestUsage.maxNotes}
-                onPress={handleGuestBadgePress}
-                showWarning={true}
-              />
-            )}
-            {!isGuestMode && (
+            {isGuestMode ? (
+              <View style={styles.guestHeaderContainer}>
+                <GuestBadge
+                  notesUsed={guestUsage.notes}
+                  maxNotes={guestUsage.maxNotes}
+                  onPress={handleGuestBadgePress}
+                  showWarning={true}
+                />
+                <TouchableOpacity 
+                  style={styles.guestUserButton}
+                  onPress={() => setShowSignUpPopup(true)}
+                >
+                  <User size={20} color="#6B7280" strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
+            ) : (
               <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
                 <LogOut size={20} color="#6B7280" strokeWidth={2} />
               </TouchableOpacity>
@@ -276,6 +283,9 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.xl,
   },
+  headerContent: {
+    flex: 1,
+  },
   greeting: {
     fontSize: theme.typography.fontSize['3xl'],
     fontFamily: theme.typography.fontFamily.bold,
@@ -286,6 +296,26 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.regular,
     color: theme.colors.text.secondary,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  guestHeaderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  guestUserButton: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.background.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...theme.shadows.sm,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
   },
   signOutButton: {
     width: 44,
@@ -407,10 +437,6 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.medium,
     color: theme.colors.error.dark,
     textAlign: 'center',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 8,
   },
   guestInfoContainer: {
     padding: 20,

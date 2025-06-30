@@ -45,6 +45,8 @@ export function GuestProvider({ children }: { children: ReactNode }) {
       // Check if user is authenticated
       const { user } = await getCurrentUser();
       
+      console.log('Initializing guest mode:', { hasUser: !!user });
+      
       if (user) {
         // User is authenticated, check for pending migration
         await checkAndMigrateGuestData();
@@ -52,18 +54,21 @@ export function GuestProvider({ children }: { children: ReactNode }) {
         setGuestUser(null);
         setGuestNotes([]);
         setGuestUsage({ notes: 0, reminders: 0, maxNotes: 3, maxReminders: 2 });
+        console.log('User authenticated, guest mode disabled');
       } else {
         // User is not authenticated, initialize guest mode
         await guestModeManager.initialize();
-        const guestUser = await guestModeManager.getGuestUser();
+        let currentGuestUser = await guestModeManager.getGuestUser();
         
-        if (!guestUser) {
+        if (!currentGuestUser) {
           // Create new guest user
-          const newGuestUser = await guestModeManager.createGuestUser();
-          setGuestUser(newGuestUser);
+          currentGuestUser = await guestModeManager.createGuestUser();
+          console.log('Created new guest user');
         } else {
-          setGuestUser(guestUser);
+          console.log('Loaded existing guest user');
         }
+        
+        setGuestUser(currentGuestUser);
         
         // Load guest notes and usage
         const notes = await guestModeManager.getGuestNotes();
@@ -72,11 +77,18 @@ export function GuestProvider({ children }: { children: ReactNode }) {
         setGuestNotes(notes);
         setGuestUsage(usage);
         setIsGuestMode(true);
+        console.log('Guest mode initialized:', { notesCount: notes.length, usage });
       }
     } catch (error) {
       console.error('Error initializing guest mode:', error);
-      // On error, default to guest mode
+      // On error, default to guest mode for better UX
       setIsGuestMode(true);
+      try {
+        const newGuestUser = await guestModeManager.createGuestUser();
+        setGuestUser(newGuestUser);
+      } catch (createError) {
+        console.error('Failed to create fallback guest user:', createError);
+      }
     } finally {
       setLoading(false);
     }
@@ -177,31 +189,35 @@ export function GuestProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.id);
+        console.log('Auth state changed in guest context:', event, session?.user?.id);
         
         if (event === 'SIGNED_IN' && session?.user) {
           // User signed in, migrate guest data and switch to authenticated mode
           try {
+            setLoading(true);
             await checkAndMigrateGuestData();
             setIsGuestMode(false);
             setGuestUser(null);
             setGuestNotes([]);
             setGuestUsage({ notes: 0, reminders: 0, maxNotes: 3, maxReminders: 2 });
+            console.log('Switched to authenticated mode');
           } catch (error) {
             console.error('Error handling sign in:', error);
+          } finally {
+            setLoading(false);
           }
         } else if (event === 'SIGNED_OUT') {
           // User signed out, switch to guest mode
           try {
+            setLoading(true);
             await guestModeManager.initialize();
-            const guestUser = await guestModeManager.getGuestUser();
+            let currentGuestUser = await guestModeManager.getGuestUser();
             
-            if (!guestUser) {
-              const newGuestUser = await guestModeManager.createGuestUser();
-              setGuestUser(newGuestUser);
-            } else {
-              setGuestUser(guestUser);
+            if (!currentGuestUser) {
+              currentGuestUser = await guestModeManager.createGuestUser();
             }
+            
+            setGuestUser(currentGuestUser);
             
             const notes = await guestModeManager.getGuestNotes();
             const usage = await guestModeManager.getGuestUsage();
@@ -209,8 +225,11 @@ export function GuestProvider({ children }: { children: ReactNode }) {
             setGuestNotes(notes);
             setGuestUsage(usage);
             setIsGuestMode(true);
+            console.log('Switched to guest mode');
           } catch (error) {
             console.error('Error handling sign out:', error);
+          } finally {
+            setLoading(false);
           }
         }
       }

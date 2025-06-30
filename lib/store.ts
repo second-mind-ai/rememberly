@@ -26,7 +26,6 @@ interface NotesState {
   deleteNote: (id: string) => Promise<void>;
   completeReminder: (id: string) => Promise<void>;
   clearError: () => void;
-  setGuestMode: (isGuest: boolean) => void;
 }
 
 export const useNotesStore = create<NotesState>((set, get) => ({
@@ -73,7 +72,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       if (!user) {
         // Guest mode - fetch from local storage
         const guestReminders = await guestModeManager.getGuestReminders();
-        set({ reminders: guestReminders, loading: false, isGuestMode: true });
+        set({ reminders: guestReminders, loading: false });
         return;
       }
 
@@ -85,7 +84,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
         .order('remind_at', { ascending: true });
 
       if (error) throw error;
-      set({ reminders: data || [], loading: false, isGuestMode: false });
+      set({ reminders: data || [], loading: false });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch reminders';
       set({ error: errorMessage, loading: false });
@@ -161,7 +160,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
         const newReminder = await guestModeManager.createGuestReminder(reminderData);
         if (newReminder) {
           const currentReminders = get().reminders;
-          set({ reminders: [...currentReminders, newReminder], loading: false, isGuestMode: true });
+          set({ reminders: [...currentReminders, newReminder], loading: false });
         }
         return newReminder;
       }
@@ -176,7 +175,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       if (error) throw error;
 
       const currentReminders = get().reminders;
-      set({ reminders: [...currentReminders, data], loading: false, isGuestMode: false });
+      set({ reminders: [...currentReminders, data], loading: false });
       return data;
     } catch (error) {
       const errorMessage = (error as Error).message;
@@ -213,7 +212,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
         const updatedNotes = currentNotes.map((note) =>
           note.id === id ? { ...note, ...guestUpdates, updated_at: new Date().toISOString() } : note
         );
-        set({ notes: updatedNotes, loading: false, isGuestMode: true });
+        set({ notes: updatedNotes, loading: false });
         return;
       }
 
@@ -229,7 +228,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       const updatedNotes = currentNotes.map((note) =>
         note.id === id ? { ...note, ...updates } : note
       );
-      set({ notes: updatedNotes, loading: false, isGuestMode: false });
+      set({ notes: updatedNotes, loading: false });
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
     }
@@ -246,7 +245,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
         await guestModeManager.deleteGuestNote(id);
         const currentNotes = get().notes;
         const filteredNotes = currentNotes.filter((note) => note.id !== id);
-        set({ notes: filteredNotes, loading: false, isGuestMode: true });
+        set({ notes: filteredNotes, loading: false });
         return;
       }
 
@@ -265,7 +264,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
 
       const currentNotes = get().notes;
       const filteredNotes = currentNotes.filter((note) => note.id !== id);
-      set({ notes: filteredNotes, loading: false, isGuestMode: false });
+      set({ notes: filteredNotes, loading: false });
     } catch (error) {
       const errorMessage = (error as Error).message;
       set({ error: errorMessage, loading: false });
@@ -284,7 +283,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
         await guestModeManager.completeGuestReminder(id);
         const currentReminders = get().reminders;
         const filteredReminders = currentReminders.filter((reminder) => reminder.id !== id);
-        set({ reminders: filteredReminders, loading: false, isGuestMode: true });
+        set({ reminders: filteredReminders, loading: false });
         return;
       }
 
@@ -298,13 +297,11 @@ export const useNotesStore = create<NotesState>((set, get) => ({
 
       const currentReminders = get().reminders;
       const filteredReminders = currentReminders.filter((reminder) => reminder.id !== id);
-      set({ reminders: filteredReminders, loading: false, isGuestMode: false });
+      set({ reminders: filteredReminders, loading: false });
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
     }
   },
 
   clearError: () => set({ error: null }),
-  
-  setGuestMode: (isGuest: boolean) => set({ isGuestMode: isGuest }),
 }));

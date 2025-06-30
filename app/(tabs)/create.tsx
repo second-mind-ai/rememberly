@@ -80,8 +80,8 @@ export default function CreateScreen() {
   const [showSignUpPopup, setShowSignUpPopup] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [scaleAnim] = useState(new Animated.Value(0.8));
-  const { createNote, isGuestMode } = useNotesStore();
-  const { guestUsage } = useGuestMode();
+  const { createNote } = useNotesStore();
+  const { guestUsage, isGuestMode } = useGuestMode();
 
   function showSweetAlert() {
     setShowSuccessModal(true);

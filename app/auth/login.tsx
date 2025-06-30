@@ -14,7 +14,7 @@ import {
 import { Link, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signIn } from '@/lib/auth';
-import { useNotesStore } from '@/lib/store';
+import { useGuestMode } from '@/lib/guestContext';
 import { Brain } from 'lucide-react-native';
 import { theme } from '@/lib/theme';
 
@@ -24,7 +24,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fadeAnim] = useState(new Animated.Value(0));
-  const { isGuestMode } = useNotesStore();
+  const { isGuestMode } = useGuestMode();
 
   React.useEffect(() => {
     Animated.timing(fadeAnim, {

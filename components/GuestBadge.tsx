@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { User, AlertTriangle } from 'lucide-react-native';
+import { User, AlertTriangle, Crown } from 'lucide-react-native';
 import { theme } from '@/lib/theme';
 
 interface GuestBadgeProps {
@@ -23,30 +23,48 @@ export function GuestBadge({ notesUsed, maxNotes, onPress, showWarning = false }
       ]} 
       onPress={onPress}
       disabled={!onPress}
+      activeOpacity={0.7}
     >
       <View style={styles.content}>
-        <User size={16} color={isAtLimit ? '#ffffff' : '#6B7280'} strokeWidth={2} />
-        <Text style={[
-          styles.text,
-          isAtLimit && styles.textAtLimit,
-          isNearLimit && !isAtLimit && styles.textNearLimit
+        <View style={[
+          styles.iconContainer,
+          isAtLimit && styles.iconContainerAtLimit,
+          isNearLimit && !isAtLimit && styles.iconContainerNearLimit
         ]}>
-          Guest
-        </Text>
-        <Text style={[
-          styles.usage,
-          isAtLimit && styles.usageAtLimit,
-          isNearLimit && !isAtLimit && styles.usageNearLimit
-        ]}>
-          {notesUsed}/{maxNotes}
-        </Text>
+          <User size={14} color={isAtLimit ? '#ffffff' : '#6B7280'} strokeWidth={2} />
+        </View>
+        <View style={styles.textContainer}>
+          <Text style={[
+            styles.text,
+            isAtLimit && styles.textAtLimit,
+            isNearLimit && !isAtLimit && styles.textNearLimit
+          ]}>
+            Guest
+          </Text>
+          <Text style={[
+            styles.usage,
+            isAtLimit && styles.usageAtLimit,
+            isNearLimit && !isAtLimit && styles.usageNearLimit
+          ]}>
+            {notesUsed}/{maxNotes}
+          </Text>
+        </View>
         {showWarning && (isNearLimit || isAtLimit) && (
-          <AlertTriangle 
-            size={14} 
-            color={isAtLimit ? '#ffffff' : '#F59E0B'} 
-            strokeWidth={2} 
-            style={styles.warningIcon}
-          />
+          <View style={styles.warningContainer}>
+            <AlertTriangle 
+              size={12} 
+              color={isAtLimit ? '#ffffff' : '#F59E0B'} 
+              strokeWidth={2} 
+            />
+          </View>
+        )}
+        {onPress && (
+          <View style={[
+            styles.upgradeIndicator,
+            isAtLimit && styles.upgradeIndicatorAtLimit
+          ]}>
+            <Crown size={10} color={isAtLimit ? '#ffffff' : '#6B7280'} strokeWidth={2} />
+          </View>
         )}
       </View>
     </TouchableOpacity>
@@ -55,30 +73,52 @@ export function GuestBadge({ notesUsed, maxNotes, onPress, showWarning = false }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 20,
-    paddingHorizontal: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 16,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    minHeight: 32,
+    justifyContent: 'center',
+    ...theme.shadows.sm,
   },
   containerNearLimit: {
     backgroundColor: '#FEF3C7',
     borderColor: '#F59E0B',
   },
   containerAtLimit: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#EF4444',
+    backgroundColor: '#EF4444',
+    borderColor: '#DC2626',
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+  },
+  iconContainer: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconContainerNearLimit: {
+    backgroundColor: '#F59E0B',
+  },
+  iconContainerAtLimit: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  textContainer: {
+    flexDirection: 'column',
+    gap: 1,
   },
   text: {
-    fontSize: theme.typography.fontSize.sm,
-    fontFamily: theme.typography.fontFamily.medium,
+    fontSize: 11,
+    fontFamily: theme.typography.fontFamily.semiBold,
     color: '#6B7280',
+    lineHeight: 12,
   },
   textNearLimit: {
     color: '#92400E',
@@ -87,33 +127,25 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   usage: {
-    fontSize: 11,
-    fontFamily: theme.typography.fontFamily.semiBold,
-    color: '#6B7280',
-    marginLeft: 2,
+    fontSize: 9,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: '#9CA3AF',
+    lineHeight: 10,
   },
   usageNearLimit: {
-    color: '#92400E',
+    color: '#B45309',
   },
   usageAtLimit: {
-    color: '#ffffff',
+    color: 'rgba(255, 255, 255, 0.8)',
   },
-  warningIcon: {
+  warningContainer: {
     marginLeft: 2,
   },
-  badgeText: {
-    fontSize: theme.typography.fontSize.sm,
-    fontFamily: theme.typography.fontFamily.medium,
-    color: theme.colors.text.inverse,
-    marginLeft: theme.spacing.xs,
+  upgradeIndicator: {
+    marginLeft: 2,
+    opacity: 0.6,
   },
-  closeButton: {
-    marginLeft: theme.spacing.sm,
-    padding: theme.spacing.xs,
-  },
-  closeText: {
-    fontSize: theme.typography.fontSize.sm,
-    fontFamily: theme.typography.fontFamily.semiBold,
-    color: theme.colors.text.inverse,
+  upgradeIndicatorAtLimit: {
+    opacity: 1,
   },
 }); 

@@ -12,7 +12,7 @@ import { Link, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { signUp } from '@/lib/auth';
-import { useNotesStore } from '@/lib/store';
+import { useGuestMode } from '@/lib/guestContext';
 import { Brain } from 'lucide-react-native';
 import { theme } from '@/lib/theme';
 
@@ -21,7 +21,7 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const { isGuestMode } = useNotesStore();
+  const { isGuestMode } = useGuestMode();
 
   async function handleSignUp() {
     if (!email || !password || !confirmPassword) {

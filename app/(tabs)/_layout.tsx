@@ -3,7 +3,6 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Chrome as Home, Search, Plus, FolderOpen, Grid2x2 } from 'lucide-react-native';
 import { theme } from '@/lib/theme';
-import { useNotesStore } from '@/lib/store';
 import { useGuestMode } from '@/lib/guestContext';
 
 type TabIconProps = {
@@ -31,8 +30,7 @@ function TabIcon({ name: Icon, color, focused, label }: TabIconProps) {
 }
 
 export default function TabLayout() {
-  const { isGuestMode } = useNotesStore();
-  const { guestUsage } = useGuestMode();
+  const { isGuestMode, guestUsage } = useGuestMode();
 
   return (
     <Tabs

@@ -1,5 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { nanoid } from 'nanoid';
+
+// React Native compatible ID generation function
+function generateId(): string {
+  const timestamp = Date.now().toString(36);
+  const randomPart = Math.random().toString(36).substring(2, 15);
+  return `${timestamp}_${randomPart}`;
+}
 
 export interface GuestNote {
   id: string;
@@ -81,7 +87,7 @@ export class GuestModeManager {
 
   async createGuestUser(): Promise<GuestUser> {
     const guestUser: GuestUser = {
-      id: `guest_${nanoid()}`,
+      id: `guest_${generateId()}`,
       is_guest: true,
       note_count: 0,
       created_at: new Date().toISOString(),
@@ -111,7 +117,7 @@ export class GuestModeManager {
 
     const newNote: GuestNote = {
       ...noteData,
-      id: nanoid(),
+      id: generateId(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       is_guest: true,
@@ -173,7 +179,7 @@ export class GuestModeManager {
 
     const newReminder = {
       ...reminderData,
-      id: nanoid(),
+      id: generateId(),
       user_id: guestUser.id,
       created_at: new Date().toISOString(),
       is_guest: true,
