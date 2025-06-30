@@ -37,6 +37,11 @@ interface UserNote {
 interface UserProfile {
   id: string
   expo_push_token: string | null
+  notification_preferences: {
+    daily_summary?: boolean
+    reminders?: boolean
+    mentions?: boolean
+  }
 }
 
 serve(async (req) => {
@@ -57,6 +62,13 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // Log cron job start
+    await supabase.rpc('log_cron_job_execution', {
+      p_job_name: 'daily_notifications',
+      p_status: 'started',
+      p_message: 'Daily notifications cron job started'
+    })
 
     // Calculate 24 hours ago
     const twentyFourHoursAgo = new Date()
@@ -81,6 +93,12 @@ serve(async (req) => {
 
     if (notesError) {
       console.error('❌ Error fetching notes:', notesError)
+      await supabase.rpc('log_cron_job_execution', {
+        p_job_name: 'daily_notifications',
+        p_status: 'error',
+        p_message: 'Failed to fetch notes',
+        p_error_details: notesError.message
+      })
       throw notesError
     }
 
@@ -88,6 +106,12 @@ serve(async (req) => {
 
     if (!recentNotes || recentNotes.length === 0) {
       console.log('✅ No recent notes found, skipping notifications')
+      await supabase.rpc('log_cron_job_execution', {
+        p_job_name: 'daily_notifications',
+        p_status: 'completed',
+        p_message: 'No recent notes found, no notifications sent'
+      })
+      
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -112,32 +136,49 @@ serve(async (req) => {
 
     console.log(`👥 Notes grouped for ${Object.keys(notesByUser).length} users`)
 
-    // Get user profiles with push tokens
+    // Get user profiles with push tokens and notification preferences
     const userIds = Object.keys(notesByUser)
     const { data: userProfiles, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, expo_push_token')
+      .select('id, expo_push_token, notification_preferences')
       .in('id', userIds)
       .not('expo_push_token', 'is', null)
 
     if (profilesError) {
       console.error('❌ Error fetching user profiles:', profilesError)
-      // Continue without profiles - we'll try to get tokens from auth metadata
+      await supabase.rpc('log_cron_job_execution', {
+        p_job_name: 'daily_notifications',
+        p_status: 'error',
+        p_message: 'Failed to fetch user profiles',
+        p_error_details: profilesError.message
+      })
+      throw profilesError
     }
 
     console.log(`📱 Found ${userProfiles?.length || 0} users with push tokens`)
+
+    // Filter users who have daily_summary enabled
+    const eligibleUsers = userProfiles?.filter(profile => {
+      const prefs = profile.notification_preferences || {}
+      return prefs.daily_summary !== false // Default to true if not set
+    }) || []
+
+    console.log(`✅ ${eligibleUsers.length} users eligible for daily notifications`)
 
     // Prepare notifications
     const notifications: NotificationPayload[] = []
     let notificationsSent = 0
 
-    for (const userId of userIds) {
-      const userNotes = notesByUser[userId]
-      const userProfile = userProfiles?.find(p => p.id === userId)
+    for (const userProfile of eligibleUsers) {
+      const userNotes = notesByUser[userProfile.id]
       
-      // Skip if no push token available
-      if (!userProfile?.expo_push_token) {
-        console.log(`⚠️ No push token for user ${userId}, skipping`)
+      if (!userNotes || userNotes.length === 0) {
+        continue
+      }
+
+      // Skip if no valid push token
+      if (!userProfile.expo_push_token || !userProfile.expo_push_token.startsWith('ExponentPushToken[')) {
+        console.log(`⚠️ Invalid push token for user ${userProfile.id}: ${userProfile.expo_push_token}`)
         continue
       }
 
@@ -156,14 +197,14 @@ serve(async (req) => {
         body = `Latest: "${latestNote.title}" and ${noteCount - 1} more. Tap to view all your recent notes.`
       }
 
-      // Create notification payload matching existing format
+      // Create notification payload matching Expo Push API format
       const notification: NotificationPayload = {
         to: userProfile.expo_push_token,
         sound: 'default',
         title: title.substring(0, 100), // Limit title length
         body: body.substring(0, 500), // Limit body length
         data: {
-          id: `daily-summary-${Date.now()}`,
+          id: `daily-summary-${Date.now()}-${userProfile.id}`,
           type: 'daily_summary',
           priority: 'medium',
           metadata: {
@@ -186,6 +227,8 @@ serve(async (req) => {
       const expoPushUrl = 'https://exp.host/--/api/v2/push/send'
       
       try {
+        console.log('📡 Sending notifications to Expo Push API...')
+        
         const response = await fetch(expoPushUrl, {
           method: 'POST',
           headers: {
@@ -208,16 +251,41 @@ serve(async (req) => {
         // Count successful notifications
         if (Array.isArray(result.data)) {
           notificationsSent = result.data.filter((item: any) => item.status === 'ok').length
+          const errors = result.data.filter((item: any) => item.status === 'error')
+          
+          if (errors.length > 0) {
+            console.warn('⚠️ Some notifications failed:', errors)
+          }
         } else {
           notificationsSent = notifications.length // Assume all sent if no detailed response
         }
 
         console.log(`🎉 Successfully sent ${notificationsSent} notifications`)
 
+        // Log successful completion
+        await supabase.rpc('log_cron_job_execution', {
+          p_job_name: 'daily_notifications',
+          p_status: 'completed',
+          p_message: `Successfully sent ${notificationsSent} notifications to ${notifications.length} users`
+        })
+
       } catch (error) {
         console.error('❌ Error sending notifications:', error)
+        await supabase.rpc('log_cron_job_execution', {
+          p_job_name: 'daily_notifications',
+          p_status: 'error',
+          p_message: 'Failed to send notifications',
+          p_error_details: error instanceof Error ? error.message : 'Unknown error'
+        })
         throw error
       }
+    } else {
+      console.log('ℹ️ No notifications to send')
+      await supabase.rpc('log_cron_job_execution', {
+        p_job_name: 'daily_notifications',
+        p_status: 'completed',
+        p_message: 'No eligible users for notifications'
+      })
     }
 
     // Return success response
@@ -226,7 +294,9 @@ serve(async (req) => {
         success: true,
         message: `Daily notifications completed`,
         notesFound: recentNotes.length,
-        usersNotified: notifications.length,
+        usersWithTokens: userProfiles?.length || 0,
+        eligibleUsers: eligibleUsers.length,
+        notificationsPrepared: notifications.length,
         notificationsSent: notificationsSent,
         timestamp: new Date().toISOString(),
       }),
@@ -238,6 +308,24 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ Daily notifications function error:', error)
+    
+    // Try to log the error if Supabase is available
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+      
+      if (supabaseUrl && supabaseServiceKey) {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey)
+        await supabase.rpc('log_cron_job_execution', {
+          p_job_name: 'daily_notifications',
+          p_status: 'error',
+          p_message: 'Function execution failed',
+          p_error_details: error instanceof Error ? error.message : 'Unknown error'
+        })
+      }
+    } catch (logError) {
+      console.error('❌ Failed to log error:', logError)
+    }
     
     return new Response(
       JSON.stringify({
