@@ -55,14 +55,45 @@ export async function signOut() {
 }
 
 export async function getCurrentUser() {
-  const { data: { user }, error } = await supabase.auth.getUser();
-  
-  // Handle stale JWT session error
-  if (error && error.message === 'Session from session_id claim in JWT does not exist') {
-    // Clear the invalid session
-    await supabase.auth.signOut();
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    
+    // Handle various authentication error scenarios
+    if (error) {
+      // Handle stale JWT session error
+      if (error.message === 'Session from session_id claim in JWT does not exist' ||
+          error.message.includes('session_not_found') ||
+          error.message.includes('JWT') ||
+          error.status === 403) {
+        console.log('🔄 Clearing invalid session');
+        // Clear the invalid session silently
+        await supabase.auth.signOut();
+        return { user: null, error: null };
+      }
+      
+      // Handle network or other errors
+      if (error.message.includes('fetch') || error.message.includes('network')) {
+        console.warn('🌐 Network error during auth check:', error.message);
+        return { user: null, error: null };
+      }
+      
+      // Log other unexpected errors but don't throw
+      console.warn('⚠️ Auth check error:', error.message);
+      return { user: null, error: null };
+    }
+    
+    return { user, error: null };
+  } catch (error) {
+    // Catch any unexpected errors and handle gracefully
+    console.warn('⚠️ Unexpected error in getCurrentUser:', error);
+    
+    // Try to clear any potentially corrupted session
+    try {
+      await supabase.auth.signOut();
+    } catch (signOutError) {
+      console.warn('⚠️ Error clearing session:', signOutError);
+    }
+    
     return { user: null, error: null };
   }
-  
-  return { user, error };
 }
