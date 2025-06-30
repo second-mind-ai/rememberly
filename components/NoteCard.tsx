@@ -29,7 +29,7 @@ interface NoteCardProps {
   note: Note;
 }
 
-export function NoteCard({ note }: NoteCardProps) {
+export const NoteCard = React.memo(({ note }: NoteCardProps) => {
   const { reminders } = useReminderStore();
   
   // Check if this note has active reminders
@@ -350,7 +350,17 @@ export function NoteCard({ note }: NoteCardProps) {
       )}
     </TouchableOpacity>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison to prevent unnecessary re-renders
+  return (
+    prevProps.note.id === nextProps.note.id &&
+    prevProps.note.title === nextProps.note.title &&
+    prevProps.note.summary === nextProps.note.summary &&
+    prevProps.note.updated_at === nextProps.note.updated_at
+  );
+});
+
+NoteCard.displayName = 'NoteCard';
 
 const styles = StyleSheet.create({
   card: {

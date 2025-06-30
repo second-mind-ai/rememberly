@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { registerForPushNotificationsAsync, formatReminderTime, testLocalNotific
 import { testSupabaseConnection } from '@/lib/supabase';
 import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2, FileText, Link2, Image as ImageIcon, File, BellOff } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { ReminderCard } from '@/components/ReminderCard';
 
 type Priority = 'low' | 'medium' | 'high';
 
@@ -74,7 +75,40 @@ export default function RemindersScreen() {
   }, []);
 
   useEffect(() => {
-    checkAuthAndInitialize();
+    let cancelled = false;
+
+    async function init() {
+      try {
+        setAuthLoading(true);
+        const { user, error } = await getCurrentUser();
+        
+        if (cancelled) return;
+        
+        if (error || !user) {
+          console.log('User not authenticated, redirecting to login');
+          router.replace('/auth/login');
+          return;
+        }
+
+        setIsAuthenticated(true);
+        await initializeReminders();
+      } catch (error) {
+        console.error('Authentication check failed:', error);
+        if (!cancelled) {
+          router.replace('/auth/login');
+        }
+      } finally {
+        if (!cancelled) {
+          setAuthLoading(false);
+        }
+      }
+    }
+
+    init();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Handle hardware/system back button
@@ -97,31 +131,6 @@ export default function RemindersScreen() {
     }, [showAddModal])
   );
 
-  async function checkAuthAndInitialize() {
-    try {
-      setAuthLoading(true);
-      const { user, error } = await getCurrentUser();
-      
-      if (error || !user) {
-        console.log('User not authenticated, redirecting to login');
-        router.replace('/auth/login');
-        return;
-      }
-
-      if (isMounted.current) {
-        setIsAuthenticated(true);
-        await initializeReminders();
-      }
-    } catch (error) {
-      console.error('Authentication check failed:', error);
-      router.replace('/auth/login');
-    } finally {
-      if (isMounted.current) {
-        setAuthLoading(false);
-      }
-    }
-  }
-
   async function initializeReminders() {
     try {
       const { permission } = await registerForPushNotificationsAsync();
@@ -137,15 +146,14 @@ export default function RemindersScreen() {
     await fetchReminders();
   }
 
-  async function handleRefresh() {
-    if (isMounted.current) {
-      setRefreshing(true);
-    }
-    await fetchReminders();
-    if (isMounted.current) {
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchReminders();
+    } finally {
       setRefreshing(false);
     }
-  }
+  }, [fetchReminders]);
 
   function resetForm() {
     if (isMounted.current) {
@@ -373,6 +381,29 @@ export default function RemindersScreen() {
     }
   }
 
+  // Memoize sorted reminders
+  const { overdueReminders, upcomingReminders } = useMemo(() => {
+    const sortedReminders = [...reminders].sort((a, b) => 
+      new Date(a.remind_at).getTime() - new Date(b.remind_at).getTime()
+    );
+
+    const now = new Date();
+    const overdue = sortedReminders.filter(reminder => 
+      new Date(reminder.remind_at) < now
+    );
+    const upcoming = sortedReminders.filter(reminder => 
+      new Date(reminder.remind_at) >= now
+    );
+
+    return { overdueReminders: overdue, upcomingReminders: upcoming };
+  }, [reminders]);
+
+  const priorityColors = useMemo(() => ({
+    low: { bg: '#F0FDF4', border: '#BBF7D0', text: '#059669' },
+    medium: { bg: '#FEF3C7', border: '#FDE68A', text: '#D97706' },
+    high: { bg: '#FEF2F2', border: '#FECACA', text: '#DC2626' },
+  }), []);
+
   // Show loading screen while checking authentication
   if (authLoading) {
     return (
@@ -388,26 +419,6 @@ export default function RemindersScreen() {
   if (!isAuthenticated) {
     return null;
   }
-
-  // Sort reminders by remind_at date
-  const sortedReminders = [...reminders].sort((a, b) => 
-    new Date(a.remind_at).getTime() - new Date(b.remind_at).getTime()
-  );
-
-  // Separate overdue and upcoming reminders
-  const now = new Date();
-  const overdueReminders = sortedReminders.filter(reminder => 
-    new Date(reminder.remind_at) < now
-  );
-  const upcomingReminders = sortedReminders.filter(reminder => 
-    new Date(reminder.remind_at) >= now
-  );
-
-  const priorityColors = {
-    low: { bg: '#F0FDF4', border: '#BBF7D0', text: '#059669' },
-    medium: { bg: '#FEF3C7', border: '#FDE68A', text: '#D97706' },
-    high: { bg: '#FEF2F2', border: '#FECACA', text: '#DC2626' },
-  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -732,146 +743,6 @@ export default function RemindersScreen() {
         )}
       </Modal>
     </SafeAreaView>
-  );
-}
-
-interface ReminderCardProps {
-  reminder: any;
-  isOverdue: boolean;
-  onComplete: (id: string, title: string) => void;
-  onDelete: (id: string, title: string) => void;
-  onSnooze: (id: string, title: string) => void;
-  onMarkAsRead: (id: string, title: string) => void;
-  onClearNotification: (id: string, title: string) => void;
-  onNavigateToNote: (noteId: string) => void;
-  priorityColors: any;
-  notes: any[];
-}
-
-function ReminderCard({ 
-  reminder, 
-  isOverdue, 
-  onComplete, 
-  onDelete, 
-  onSnooze, 
-  onMarkAsRead,
-  onClearNotification,
-  onNavigateToNote,
-  priorityColors,
-  notes 
-}: ReminderCardProps) {
-  const remindDate = new Date(reminder.remind_at);
-  const priority = reminder.priority || 'medium';
-  
-  // Find associated note if exists
-  const associatedNote = reminder.note_id ? notes.find(note => note.id === reminder.note_id) : null;
-  
-  const getTypeIcon = (type: string) => {
-    switch (type) {
-      case 'url':
-        return <Link2 size={14} color="#059669" strokeWidth={2} />;
-      case 'file':
-        return <File size={14} color="#D97706" strokeWidth={2} />;
-      case 'image':
-        return <ImageIcon size={14} color="#DC2626" strokeWidth={2} />;
-      default:
-        return <FileText size={14} color="#2563EB" strokeWidth={2} />;
-    }
-  };
-  
-  return (
-    <View style={[
-      styles.reminderCard, 
-      isOverdue && styles.overdueCard,
-      { borderLeftColor: priorityColors[priority].text }
-    ]}>
-      <View style={styles.reminderHeader}>
-        <View style={styles.reminderTime}>
-          <Calendar size={16} color={isOverdue ? '#DC2626' : '#6B7280'} strokeWidth={2} />
-          <Text style={[styles.timeText, isOverdue && styles.overdueText]}>
-            {isOverdue ? 'Overdue' : formatReminderTime(remindDate)}
-          </Text>
-        </View>
-        <View style={[styles.priorityBadge, { backgroundColor: priorityColors[priority].bg }]}>
-          <Text style={[styles.priorityBadgeText, { color: priorityColors[priority].text }]}>
-            {priority.toUpperCase()}
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.reminderTitle} numberOfLines={2}>
-        {reminder.title}
-      </Text>
-
-      {reminder.description && (
-        <Text style={styles.reminderDescription} numberOfLines={2}>
-          {reminder.description}
-        </Text>
-      )}
-
-      {/* Associated Note Section */}
-      {associatedNote && (
-        <TouchableOpacity 
-          style={styles.associatedNote}
-          onPress={() => onNavigateToNote(associatedNote.id)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.noteHeader}>
-            {getTypeIcon(associatedNote.type)}
-            <Text style={styles.noteLabel}>Related Note</Text>
-          </View>
-          <Text style={styles.noteTitle} numberOfLines={1}>
-            {associatedNote.title}
-          </Text>
-          <Text style={styles.noteSummary} numberOfLines={1}>
-            {associatedNote.summary || associatedNote.original_content}
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      <View style={styles.reminderFooter}>
-        <Text style={styles.exactTime}>
-          {remindDate.toLocaleDateString('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-          })}
-        </Text>
-        
-        <View style={styles.reminderActions}>
-          {/* Clear Notification Button (Bin Icon) */}
-          <TouchableOpacity
-            style={[styles.actionButton, styles.clearButton]}
-            onPress={() => onClearNotification(reminder.id, reminder.title)}
-            activeOpacity={0.7}
-          >
-            <Trash2 size={16} color="#DC2626" strokeWidth={2} />
-          </TouchableOpacity>
-
-          {/* Complete Button (Check Icon) */}
-          <TouchableOpacity
-            style={[styles.actionButton, styles.completeButton]}
-            onPress={() => onComplete(reminder.id, reminder.title)}
-            activeOpacity={0.7}
-          >
-            <Check size={16} color="#059669" strokeWidth={2} />
-          </TouchableOpacity>
-
-          {/* Snooze Button (Only for overdue reminders) */}
-          {isOverdue && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.snoozeButton]}
-              onPress={() => onSnooze(reminder.id, reminder.title)}
-              activeOpacity={0.7}
-            >
-              <Clock size={16} color="#D97706" strokeWidth={2} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    </View>
   );
 }
 

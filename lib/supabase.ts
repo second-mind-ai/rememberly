@@ -4,23 +4,33 @@ import Constants from 'expo-constants';
 const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-// Provide fallback values for development to prevent crashes
-const defaultUrl = 'https://placeholder.supabase.co';
-const defaultKey = 'placeholder-key';
+// Validate required environment variables
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing Supabase configuration. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY environment variables.'
+  );
+}
 
-export const supabase = createClient(
-  supabaseUrl || defaultUrl, 
-  supabaseAnonKey || defaultKey
-);
+// Additional validation to ensure proper URLs
+if (!supabaseUrl.startsWith('https://') || supabaseUrl.includes('placeholder') || supabaseUrl.includes('your-project')) {
+  throw new Error('Invalid Supabase URL. Please check your environment configuration.');
+}
+
+if (supabaseAnonKey.includes('placeholder') || supabaseAnonKey.includes('your-anon-key')) {
+  throw new Error('Invalid Supabase anon key. Please check your environment configuration.');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+  },
+});
 
 // Check if we have valid configuration
 export const hasValidSupabaseConfig = () => {
-  return supabaseUrl && 
-         supabaseAnonKey && 
-         supabaseUrl !== defaultUrl && 
-         supabaseAnonKey !== defaultKey &&
-         !supabaseUrl.includes('your-project') &&
-         !supabaseAnonKey.includes('your-anon-key');
+  return true; // If we reach this point, config is valid
 };
 
 export type Database = {

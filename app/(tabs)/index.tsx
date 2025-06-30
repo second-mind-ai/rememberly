@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,43 +19,70 @@ export default function HomeScreen() {
   const { notes, loading, fetchNotes, error } = useNotesStore();
   const [user, setUser] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const isMounted = useRef(true);
+  const [authChecking, setAuthChecking] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+    
+    async function init() {
+      try {
+        // Check auth
+        const { user } = await getCurrentUser();
+        if (cancelled) return;
+        
+        if (!user) {
+          router.replace('/auth/login');
+          return;
+        }
+        
+        setUser(user);
+        setAuthChecking(false);
+        
+        // Fetch notes only after auth check
+        await fetchNotes();
+      } catch (error) {
+        console.error('Initialization error:', error);
+        if (!cancelled) {
+          setAuthChecking(false);
+        }
+      }
+    }
+    
+    init();
+    
     return () => {
-      isMounted.current = false;
+      cancelled = true;
     };
   }, []);
 
-  useEffect(() => {
-    checkAuth();
-    fetchNotes();
-  }, []);
-
-  async function checkAuth() {
-    const { user } = await getCurrentUser();
-    if (!user) {
-      router.replace('/auth/login');
-    } else {
-      if (isMounted.current) {
-        setUser(user);
-      }
-    }
-  }
-
-  async function handleRefresh() {
-    if (isMounted.current) {
-      setRefreshing(true);
-    }
-    await fetchNotes();
-    if (isMounted.current) {
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await fetchNotes();
+    } finally {
       setRefreshing(false);
     }
-  }
+  }, [fetchNotes]);
 
-  async function handleSignOut() {
-    await signOut();
-    router.replace('/auth/login');
+  const handleSignOut = useCallback(async () => {
+    try {
+      await signOut();
+      router.replace('/auth/login');
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
+  }, []);
+
+  // Show loading state while checking auth
+  if (authChecking) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Brain size={48} color="#2563EB" strokeWidth={2} />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   const recentNotes = notes.slice(0, 5);
@@ -305,5 +332,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Medium',
     color: '#DC2626',
     textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 18,
+    fontFamily: 'Inter-SemiBold',
+    color: '#2563EB',
+    marginTop: 16,
   },
 });

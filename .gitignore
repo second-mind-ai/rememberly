@@ -33,3 +33,7 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+
+# android
+android/.kotlin/
+android/.kotlin/errors/errors-1751282693241.log
