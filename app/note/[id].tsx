@@ -17,6 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useNotesStore } from '@/lib/store';
 import { useReminderStore } from '@/lib/reminderStore';
+import { useToast } from '@/hooks/useToast';
+import { Toast } from '@/components/Toast';
 import {
   ArrowLeft,
   Calendar,
@@ -39,6 +41,7 @@ export default function NoteDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { notes, deleteNote } = useNotesStore();
   const { createReminder, reminders } = useReminderStore();
+  const { toast, showSuccess, showError, hideToast } = useToast();
   const [note, setNote] = useState<Note | null>(null);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -72,12 +75,12 @@ export default function NoteDetailScreen() {
 
   async function handleSetReminder() {
     if (!reminderData.title.trim() || !note) {
-      Alert.alert('Error', 'Please enter a reminder title');
+      showError('Please enter a reminder title');
       return;
     }
 
     if (reminderData.dateTime <= new Date()) {
-      Alert.alert('Error', 'Please select a future date and time');
+      showError('Please select a future date and time');
       return;
     }
 
@@ -91,19 +94,18 @@ export default function NoteDetailScreen() {
         note_id: note.id,
       });
 
-      Alert.alert(
-        'Reminder Set',
-        `You'll be reminded about this note on ${reminderData.dateTime.toLocaleDateString()} at ${reminderData.dateTime.toLocaleTimeString(
-          [],
-          { hour: '2-digit', minute: '2-digit' }
-        )}`,
-        [
-          {
-            text: 'OK',
-            onPress: () => setShowReminderModal(false)
-          }
-        ]
-      );
+      // Show success toast
+      const formattedDate = reminderData.dateTime.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+      const formattedTime = reminderData.dateTime.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      
+      showSuccess(`Reminder set for ${formattedDate} at ${formattedTime}`);
 
       // Reset form
       setReminderData({
@@ -112,9 +114,15 @@ export default function NoteDetailScreen() {
         dateTime: new Date(Date.now() + 60 * 60 * 1000),
         priority: 'medium',
       });
+
+      // Auto-close modal after a brief delay to show the toast
+      setTimeout(() => {
+        setShowReminderModal(false);
+      }, 500);
+
     } catch (error) {
       console.error('Failed to create reminder:', error);
-      Alert.alert('Error', 'Failed to create reminder');
+      showError('Failed to create reminder. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -133,10 +141,11 @@ export default function NoteDetailScreen() {
             try {
               setLoading(true);
               await deleteNote(id);
+              showSuccess('Note deleted successfully');
               router.back();
             } catch (error) {
               console.error('Failed to delete note:', error);
-              Alert.alert('Error', 'Failed to delete note. Please try again.');
+              showError('Failed to delete note. Please try again.');
             } finally {
               setLoading(false);
             }
@@ -153,11 +162,11 @@ export default function NoteDetailScreen() {
         if (supported) {
           await Linking.openURL(note.source_url);
         } else {
-          Alert.alert('Error', 'Cannot open this URL');
+          showError('Cannot open this URL');
         }
       } catch (error) {
         console.error('Failed to open URL:', error);
-        Alert.alert('Error', 'Failed to open URL');
+        showError('Failed to open URL');
       }
     }
   }
@@ -249,6 +258,14 @@ export default function NoteDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Toast Component */}
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={hideToast}
+      />
+
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
