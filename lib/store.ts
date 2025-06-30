@@ -52,6 +52,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       const { data, error } = await supabase
         .from('notes')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -79,7 +80,8 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       // Authenticated user - fetch from database
       const { data, error } = await supabase
         .from('reminders')
-        .select('*, notes!inner(*)')
+        .select('*')
+        .eq('user_id', user.id)
         .eq('is_completed', false)
         .order('remind_at', { ascending: true });
 
@@ -125,20 +127,26 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       }
 
       // Authenticated user - create in database
+      console.log('Creating note for authenticated user:', user.id);
       const { data, error } = await supabase
         .from('notes')
         .insert({ ...noteData, user_id: user.id })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error inserting note:', error);
+        throw error;
+      }
 
+      console.log('Note created successfully:', data.id);
       const currentNotes = get().notes;
       set({ notes: [data, ...currentNotes], loading: false, isGuestMode: false });
       return data;
     } catch (error) {
       const errorMessage = (error as Error).message;
       set({ error: errorMessage, loading: false });
+      console.error('Failed to create note:', errorMessage);
       
       // Check if it's a guest limit error
       if (errorMessage.includes('Guest note limit reached')) {
@@ -166,20 +174,26 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       }
 
       // Authenticated user - create in database
+      console.log('Creating reminder for authenticated user:', user.id);
       const { data, error } = await supabase
         .from('reminders')
         .insert({ ...reminderData, user_id: user.id })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error inserting reminder:', error);
+        throw error;
+      }
 
+      console.log('Reminder created successfully:', data.id);
       const currentReminders = get().reminders;
       set({ reminders: [...currentReminders, data], loading: false });
       return data;
     } catch (error) {
       const errorMessage = (error as Error).message;
       set({ error: errorMessage, loading: false });
+      console.error('Failed to create reminder:', errorMessage);
       
       // Check if it's a guest limit error
       if (errorMessage.includes('Guest reminder limit reached')) {
@@ -220,7 +234,8 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       const { error } = await supabase
         .from('notes')
         .update(updates)
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
@@ -254,6 +269,7 @@ export const useNotesStore = create<NotesState>((set, get) => ({
         .from('notes')
         .delete()
         .eq('id', id)
+        .eq('user_id', user.id)
         .select();
 
       if (error) throw error;
@@ -291,7 +307,8 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       const { error } = await supabase
         .from('reminders')
         .update({ is_completed: true })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('user_id', user.id);
 
       if (error) throw error;
 

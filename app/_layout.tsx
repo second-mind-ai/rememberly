@@ -45,12 +45,15 @@ export default function RootLayout() {
       try {
         if (loaded && frameworkReady && !initCompleted) {
           initCompleted = true;
+          console.log('🚀 App initialization started');
 
           // Initialize notification listeners
+          console.log('🔔 Setting up notification listeners');
           initializeNotificationListeners();
 
           // Hide splash screen
           await SplashScreen.hideAsync();
+          console.log('✅ App initialization completed');
         }
       } catch (error) {
         console.error('❌ App setup error:', error);
