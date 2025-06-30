@@ -9,13 +9,15 @@ Notifications.setNotificationHandler({
     const priority = notification.request.content.data?.priority as string;
     const sound = notification.request.content.data?.sound as string;
     
-    console.log('📱 Notification received:', {
-      title: notification.request.content.title,
-      body: notification.request.content.body,
-      data: notification.request.content.data,
-      priority,
-      sound
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('📱 Notification received:', {
+        title: notification.request.content.title,
+        body: notification.request.content.body,
+        data: notification.request.content.data,
+        priority,
+        sound
+      });
+    }
     
     return {
       shouldShowAlert: true,
