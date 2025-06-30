@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
+import { pushTokenManager } from './pushTokenManager';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -31,7 +32,7 @@ Notifications.setNotificationHandler({
 
 export interface NotificationData {
   id: string;
-  type: 'reminder' | 'recurring' | 'custom';
+  type: 'reminder' | 'recurring' | 'custom' | 'daily_summary';
   priority: 'low' | 'medium' | 'high';
   sound?: 'default' | 'custom' | 'none';
   recurring?: {
@@ -174,6 +175,11 @@ export async function registerForPushNotificationsAsync(): Promise<{
     
     if (permission.granted) {
       console.log('✅ Notification permissions granted successfully');
+      
+      // Initialize push token manager if we have a real token
+      if (token && !token.includes('simulator') && !token.includes('web')) {
+        await pushTokenManager.initialize();
+      }
     } else {
       console.log('❌ Notification permissions denied');
     }
@@ -230,6 +236,16 @@ async function setupAndroidChannels(): Promise<void> {
       sound: 'default',
       showBadge: true,
     });
+
+    // Daily summary channel
+    await Notifications.setNotificationChannelAsync('daily_summary', {
+      name: 'Daily Summary',
+      importance: Notifications.AndroidImportance.DEFAULT,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#7C3AED',
+      sound: 'default',
+      showBadge: true,
+    });
     
     console.log('✅ Android channels set up successfully');
   } catch (error) {
@@ -267,7 +283,9 @@ export async function scheduleLocalNotification(
     // Determine channel based on priority and type
     let channelId = 'default';
     if (Platform.OS === 'android') {
-      if (recurring) {
+      if (data.type === 'daily_summary') {
+        channelId = 'daily_summary';
+      } else if (recurring) {
         channelId = 'recurring';
       } else if (data.priority === 'high') {
         channelId = 'high-priority';
@@ -614,6 +632,8 @@ export function initializeNotificationListeners() {
         const data = notification.request.content.data as NotificationData;
         if (data?.type === 'recurring') {
           console.log('🔄 Recurring notification received:', data);
+        } else if (data?.type === 'daily_summary') {
+          console.log('📊 Daily summary notification received:', data);
         }
       } catch (error) {
         console.error('❌ Error handling foreground notification:', error);
@@ -634,7 +654,10 @@ export function initializeNotificationListeners() {
         clearNotificationBadge();
         
         // Handle navigation based on notification data
-        if (data?.metadata?.noteId) {
+        if (data?.type === 'daily_summary') {
+          console.log('🧭 Navigate to home for daily summary');
+          router.push('/(tabs)');
+        } else if (data?.metadata?.noteId) {
           console.log('🧭 Navigate to note:', data.metadata.noteId);
           // Navigate to the specific note
           router.push(`/note/${data.metadata.noteId}`);
