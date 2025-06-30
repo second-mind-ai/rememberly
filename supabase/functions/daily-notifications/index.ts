@@ -64,11 +64,16 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Log cron job start
-    await supabase.rpc('log_cron_job_execution', {
-      p_job_name: 'daily_notifications',
-      p_status: 'started',
-      p_message: 'Daily notifications cron job started'
-    })
+    try {
+      await supabase.rpc('log_cron_job_execution', {
+        p_job_name: 'daily_notifications',
+        p_status: 'started',
+        p_message: 'Daily notifications cron job started'
+      })
+    } catch (logError) {
+      console.warn('⚠️ Failed to log job start:', logError)
+      // Continue execution even if logging fails
+    }
 
     // Calculate 24 hours ago
     const twentyFourHoursAgo = new Date()
@@ -93,12 +98,16 @@ serve(async (req) => {
 
     if (notesError) {
       console.error('❌ Error fetching notes:', notesError)
-      await supabase.rpc('log_cron_job_execution', {
-        p_job_name: 'daily_notifications',
-        p_status: 'error',
-        p_message: 'Failed to fetch notes',
-        p_error_details: notesError.message
-      })
+      try {
+        await supabase.rpc('log_cron_job_execution', {
+          p_job_name: 'daily_notifications',
+          p_status: 'error',
+          p_message: 'Failed to fetch notes',
+          p_error_details: notesError.message
+        })
+      } catch (logError) {
+        console.warn('⚠️ Failed to log error:', logError)
+      }
       throw notesError
     }
 
@@ -106,11 +115,15 @@ serve(async (req) => {
 
     if (!recentNotes || recentNotes.length === 0) {
       console.log('✅ No recent notes found, skipping notifications')
-      await supabase.rpc('log_cron_job_execution', {
-        p_job_name: 'daily_notifications',
-        p_status: 'completed',
-        p_message: 'No recent notes found, no notifications sent'
-      })
+      try {
+        await supabase.rpc('log_cron_job_execution', {
+          p_job_name: 'daily_notifications',
+          p_status: 'completed',
+          p_message: 'No recent notes found, no notifications sent'
+        })
+      } catch (logError) {
+        console.warn('⚠️ Failed to log completion:', logError)
+      }
       
       return new Response(
         JSON.stringify({ 
@@ -125,8 +138,14 @@ serve(async (req) => {
       )
     }
 
-    // Group notes by user
+    // Group notes by user, filtering out null user_ids
     const notesByUser = recentNotes.reduce((acc: Record<string, UserNote[]>, note) => {
+      // Skip notes with null user_id
+      if (!note.user_id) {
+        console.log('⚠️ Skipping note with null user_id:', note.id)
+        return acc
+      }
+      
       if (!acc[note.user_id]) {
         acc[note.user_id] = []
       }
@@ -146,12 +165,16 @@ serve(async (req) => {
 
     if (profilesError) {
       console.error('❌ Error fetching user profiles:', profilesError)
-      await supabase.rpc('log_cron_job_execution', {
-        p_job_name: 'daily_notifications',
-        p_status: 'error',
-        p_message: 'Failed to fetch user profiles',
-        p_error_details: profilesError.message
-      })
+      try {
+        await supabase.rpc('log_cron_job_execution', {
+          p_job_name: 'daily_notifications',
+          p_status: 'error',
+          p_message: 'Failed to fetch user profiles',
+          p_error_details: profilesError.message
+        })
+      } catch (logError) {
+        console.warn('⚠️ Failed to log error:', logError)
+      }
       throw profilesError
     }
 
@@ -263,29 +286,41 @@ serve(async (req) => {
         console.log(`🎉 Successfully sent ${notificationsSent} notifications`)
 
         // Log successful completion
-        await supabase.rpc('log_cron_job_execution', {
-          p_job_name: 'daily_notifications',
-          p_status: 'completed',
-          p_message: `Successfully sent ${notificationsSent} notifications to ${notifications.length} users`
-        })
+        try {
+          await supabase.rpc('log_cron_job_execution', {
+            p_job_name: 'daily_notifications',
+            p_status: 'completed',
+            p_message: `Successfully sent ${notificationsSent} notifications to ${notifications.length} users`
+          })
+        } catch (logError) {
+          console.warn('⚠️ Failed to log completion:', logError)
+        }
 
       } catch (error) {
         console.error('❌ Error sending notifications:', error)
-        await supabase.rpc('log_cron_job_execution', {
-          p_job_name: 'daily_notifications',
-          p_status: 'error',
-          p_message: 'Failed to send notifications',
-          p_error_details: error instanceof Error ? error.message : 'Unknown error'
-        })
+        try {
+          await supabase.rpc('log_cron_job_execution', {
+            p_job_name: 'daily_notifications',
+            p_status: 'error',
+            p_message: 'Failed to send notifications',
+            p_error_details: error instanceof Error ? error.message : 'Unknown error'
+          })
+        } catch (logError) {
+          console.warn('⚠️ Failed to log error:', logError)
+        }
         throw error
       }
     } else {
       console.log('ℹ️ No notifications to send')
-      await supabase.rpc('log_cron_job_execution', {
-        p_job_name: 'daily_notifications',
-        p_status: 'completed',
-        p_message: 'No eligible users for notifications'
-      })
+      try {
+        await supabase.rpc('log_cron_job_execution', {
+          p_job_name: 'daily_notifications',
+          p_status: 'completed',
+          p_message: 'No eligible users for notifications'
+        })
+      } catch (logError) {
+        console.warn('⚠️ Failed to log completion:', logError)
+      }
     }
 
     // Return success response
