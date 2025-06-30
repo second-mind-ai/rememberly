@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/useToast';
 import { Toast } from '@/components/Toast';
 import { registerForPushNotificationsAsync, formatReminderTime, testLocalNotificationWhenClosed } from '@/lib/notifications';
 import { testSupabaseConnection } from '@/lib/supabase';
-import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2, FileText, Link2, Image as ImageIcon, File, CircleCheck as CheckCircle, BellOff } from 'lucide-react-native';
+import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2, FileText, Link2, Image as ImageIcon, File, BellOff } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 type Priority = 'low' | 'medium' | 'high';
@@ -49,7 +49,7 @@ export default function RemindersScreen() {
   } = useReminderStore();
   
   const { notes } = useNotesStore();
-  const { toast, showSuccess, showError, hideToast } = useToast();
+  const { toast, showSuccess, showError, showInfo, hideToast } = useToast();
   
   const [refreshing, setRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -266,26 +266,13 @@ export default function RemindersScreen() {
   }
 
   async function handleCompleteReminder(id: string, title: string) {
-    Alert.alert(
-      'Complete Reminder',
-      `Mark "${title}" as completed?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Complete', 
-          onPress: async () => {
-            try {
-              await completeReminder(id);
-              showSuccess('Reminder completed');
-            } catch (error) {
-              console.error('Failed to complete reminder:', error);
-              showError('Failed to complete reminder');
-            }
-          },
-          style: 'default'
-        }
-      ]
-    );
+    try {
+      await completeReminder(id);
+      showSuccess('Reminder completed');
+    } catch (error) {
+      console.error('Failed to complete reminder:', error);
+      showError('Failed to complete reminder');
+    }
   }
 
   async function handleDeleteReminder(id: string, title: string) {
@@ -854,44 +841,34 @@ function ReminderCard({
         </Text>
         
         <View style={styles.reminderActions}>
-          {/* Mark as Read Button */}
-          <TouchableOpacity
-            style={[styles.actionButton, styles.readButton]}
-            onPress={() => onMarkAsRead(reminder.id, reminder.title)}
-          >
-            <CheckCircle size={16} color="#059669" strokeWidth={2} />
-          </TouchableOpacity>
-
-          {/* Clear Notification Button */}
+          {/* Clear Notification Button (Bin Icon) */}
           <TouchableOpacity
             style={[styles.actionButton, styles.clearButton]}
             onPress={() => onClearNotification(reminder.id, reminder.title)}
+            activeOpacity={0.7}
           >
-            <BellOff size={16} color="#6B7280" strokeWidth={2} />
+            <Trash2 size={16} color="#DC2626" strokeWidth={2} />
           </TouchableOpacity>
 
+          {/* Complete Button (Check Icon) */}
+          <TouchableOpacity
+            style={[styles.actionButton, styles.completeButton]}
+            onPress={() => onComplete(reminder.id, reminder.title)}
+            activeOpacity={0.7}
+          >
+            <Check size={16} color="#059669" strokeWidth={2} />
+          </TouchableOpacity>
+
+          {/* Snooze Button (Only for overdue reminders) */}
           {isOverdue && (
             <TouchableOpacity
               style={[styles.actionButton, styles.snoozeButton]}
               onPress={() => onSnooze(reminder.id, reminder.title)}
+              activeOpacity={0.7}
             >
               <Clock size={16} color="#D97706" strokeWidth={2} />
             </TouchableOpacity>
           )}
-          
-          <TouchableOpacity
-            style={[styles.actionButton, styles.completeButton]}
-            onPress={() => onComplete(reminder.id, reminder.title)}
-          >
-            <Check size={16} color="#059669" strokeWidth={2} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={() => onDelete(reminder.id, reminder.title)}
-          >
-            <Trash2 size={16} color="#DC2626" strokeWidth={2} />
-          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -1110,20 +1087,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#F9FAFB',
   },
-  readButton: {
-    backgroundColor: '#F0FDF4',
-  },
   clearButton: {
-    backgroundColor: '#F8FAFC',
-  },
-  snoozeButton: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: '#FEF2F2',
   },
   completeButton: {
     backgroundColor: '#F0FDF4',
   },
-  deleteButton: {
-    backgroundColor: '#FEF2F2',
+  snoozeButton: {
+    backgroundColor: '#FEF3C7',
   },
   emptyState: {
     alignItems: 'center',
