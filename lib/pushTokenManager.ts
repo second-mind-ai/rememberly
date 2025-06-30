@@ -58,24 +58,53 @@ export class PushTokenManager {
    */
   private async saveTokenToProfile(userId: string, token: string): Promise<void> {
     try {
-      // First, try to update existing profile
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ 
-          expo_push_token: token,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', userId);
+      if (!userId) {
+        console.error('❌ Cannot save token: userId is null or undefined');
+        return;
+      }
 
-      if (updateError) {
-        // If update fails, try to insert new profile
-        console.log('Profile update failed, attempting insert...');
+      console.log('💾 Saving push token for user:', userId);
+      
+      // First, check if profile exists
+      const { data: existingProfile, error: checkError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .single();
         
+      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "no rows returned" error
+        console.error('❌ Error checking profile existence:', checkError);
+        throw checkError;
+      }
+
+      if (existingProfile) {
+        // Update existing profile
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ 
+            expo_push_token: token,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userId);
+
+        if (updateError) {
+          console.error('❌ Error updating profile:', updateError);
+          throw updateError;
+        }
+
+        console.log('✅ Updated existing profile with push token');
+      } else {
+        // Insert new profile
         const { error: insertError } = await supabase
           .from('profiles')
           .insert({
             id: userId,
             expo_push_token: token,
+            notification_preferences: {
+              daily_summary: true,
+              reminders: true,
+              mentions: true
+            }
           });
 
         if (insertError) {
@@ -84,8 +113,6 @@ export class PushTokenManager {
         }
 
         console.log('✅ Created new profile with push token');
-      } else {
-        console.log('✅ Updated existing profile with push token');
       }
 
     } catch (error) {
@@ -100,7 +127,10 @@ export class PushTokenManager {
   async updateToken(): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('❌ No authenticated user, skipping token update');
+        return;
+      }
 
       const { token } = await registerForPushNotificationsAsync();
       if (token && token !== this.currentToken) {
@@ -119,7 +149,10 @@ export class PushTokenManager {
   async removeToken(): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('❌ No authenticated user, skipping token removal');
+        return;
+      }
 
       await supabase
         .from('profiles')
@@ -153,7 +186,10 @@ export class PushTokenManager {
   }): Promise<void> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        console.log('❌ No authenticated user, skipping preferences update');
+        return;
+      }
 
       const { error } = await supabase
         .from('profiles')
@@ -180,7 +216,10 @@ export class PushTokenManager {
   async getNotificationPreferences(): Promise<any> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
+      if (!user) {
+        console.log('❌ No authenticated user, skipping preferences fetch');
+        return null;
+      }
 
       const { data, error } = await supabase
         .from('profiles')

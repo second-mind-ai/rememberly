@@ -148,9 +148,11 @@ export async function registerForPushNotificationsAsync(): Promise<{
         // Use project ID from expo config or constants
         const projectId = Constants.expoConfig?.extra?.eas?.projectId || 
                          Constants.easConfig?.projectId ||
-                         Constants.manifest?.extra?.eas?.projectId;
+                         Constants.manifest?.extra?.eas?.projectId ||
+                         'rememberly-supabase-notifications'; // Fallback to app.json projectId
 
         if (projectId) {
+          console.log('🔑 Using project ID for push token:', projectId);
           const tokenData = await Notifications.getExpoPushTokenAsync({
             projectId: projectId,
           });
