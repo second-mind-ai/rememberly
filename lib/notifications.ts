@@ -9,6 +9,14 @@ Notifications.setNotificationHandler({
     const priority = notification.request.content.data?.priority as string;
     const sound = notification.request.content.data?.sound as string;
     
+    console.log('📱 Notification received:', {
+      title: notification.request.content.title,
+      body: notification.request.content.body,
+      data: notification.request.content.data,
+      priority,
+      sound
+    });
+    
     return {
       shouldShowAlert: true,
       shouldShowBanner: true,
@@ -64,6 +72,8 @@ export async function registerForPushNotificationsAsync(): Promise<{
   };
 
   try {
+    console.log('🔔 Registering for push notifications...');
+    
     if (Platform.OS === 'web') {
       // Web notifications
       if ('Notification' in window) {
@@ -76,6 +86,9 @@ export async function registerForPushNotificationsAsync(): Promise<{
         
         if (permission.granted) {
           token = 'web-notifications-enabled';
+          console.log('✅ Web notifications enabled');
+        } else {
+          console.log('❌ Web notifications denied');
         }
       }
       return { token, permission };
@@ -84,7 +97,7 @@ export async function registerForPushNotificationsAsync(): Promise<{
     // Note: Local notifications work in simulator, push notifications don't
     const isSimulator = !Constants.isDevice;
     if (isSimulator) {
-      console.warn('Push notifications only work on physical devices, but local notifications will work');
+      console.warn('⚠️ Push notifications only work on physical devices, but local notifications will work');
     }
 
     // Set up notification channels for Android first
@@ -99,8 +112,12 @@ export async function registerForPushNotificationsAsync(): Promise<{
     permission.status = existingStatus;
     permission.canAskAgain = canAskAgain;
     
+    console.log('📋 Current permission status:', existingStatus);
+    
     // Request permissions if not granted
     if (existingStatus !== 'granted') {
+      console.log('🔄 Requesting notification permissions...');
+      
       const permissionRequest = Platform.OS === 'ios' 
         ? {
             ios: {
@@ -115,6 +132,8 @@ export async function registerForPushNotificationsAsync(): Promise<{
       const { status, canAskAgain: newCanAskAgain } = await Notifications.requestPermissionsAsync(permissionRequest);
       finalStatus = status;
       permission.canAskAgain = newCanAskAgain;
+      
+      console.log('📋 New permission status:', status);
     }
     
     permission.granted = finalStatus === 'granted';
@@ -133,22 +152,31 @@ export async function registerForPushNotificationsAsync(): Promise<{
             projectId: projectId,
           });
           token = tokenData.data;
+          console.log('🎯 Got push token:', token?.substring(0, 20) + '...');
         } else {
           // Fallback for development
-          console.warn('No project ID found, using development token');
+          console.warn('⚠️ No project ID found, using development token');
           const tokenData = await Notifications.getDevicePushTokenAsync();
           token = tokenData.data;
+          console.log('🔧 Got device token:', typeof token);
         }
       } catch (error) {
-        console.error('Error getting push token:', error);
+        console.error('❌ Error getting push token:', error);
         // Don't throw here, just log the error
       }
     } else if (permission.granted && isSimulator) {
       // For simulator, just set a placeholder token to indicate permissions are granted
       token = 'simulator-local-notifications-enabled';
+      console.log('🔧 Simulator: Local notifications enabled');
+    }
+    
+    if (permission.granted) {
+      console.log('✅ Notification permissions granted successfully');
+    } else {
+      console.log('❌ Notification permissions denied');
     }
   } catch (error) {
-    console.error('Error in registerForPushNotificationsAsync:', error);
+    console.error('❌ Error in registerForPushNotificationsAsync:', error);
     // Return default permission state on error
   }
 
@@ -157,6 +185,8 @@ export async function registerForPushNotificationsAsync(): Promise<{
 
 async function setupAndroidChannels(): Promise<void> {
   try {
+    console.log('📱 Setting up Android notification channels...');
+    
     // Default channel
     await Notifications.setNotificationChannelAsync('default', {
       name: 'Default Notifications',
@@ -198,8 +228,10 @@ async function setupAndroidChannels(): Promise<void> {
       sound: 'default',
       showBadge: true,
     });
+    
+    console.log('✅ Android channels set up successfully');
   } catch (error) {
-    console.error('Error setting up Android channels:', error);
+    console.error('❌ Error setting up Android channels:', error);
   }
 }
 
@@ -208,6 +240,13 @@ export async function scheduleLocalNotification(
   options: ScheduleNotificationOptions
 ): Promise<string | null> {
   try {
+    console.log('📅 Scheduling notification:', {
+      title: options.title,
+      triggerDate: options.triggerDate,
+      type: options.data.type,
+      priority: options.data.priority
+    });
+    
     if (Platform.OS === 'web') {
       return scheduleWebNotification(options);
     }
@@ -252,8 +291,6 @@ export async function scheduleLocalNotification(
       notificationContent.badge = badge;
     }
 
-    // iOS-specific properties - priority setting removed as API changed
-
     // Android-specific properties
     if (Platform.OS === 'android') {
       notificationContent.channelId = channelId;
@@ -274,9 +311,10 @@ export async function scheduleLocalNotification(
       },
     });
 
+    console.log('✅ Notification scheduled successfully:', notificationId);
     return notificationId;
   } catch (error) {
-    console.error('Error scheduling notification:', error);
+    console.error('❌ Error scheduling notification:', error);
     throw new Error(`Failed to schedule notification: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -294,6 +332,8 @@ async function scheduleRecurringNotification(
   let count = 0;
 
   try {
+    console.log('🔄 Scheduling recurring notifications...');
+    
     while (count < maxNotifications) {
       if (endDate && currentDate > endDate) {
         break;
@@ -335,21 +375,25 @@ async function scheduleRecurringNotification(
       count++;
     }
 
+    console.log(`✅ Scheduled ${notificationIds.length} recurring notifications`);
     // Return the first notification ID as the primary identifier
     return notificationIds[0] || '';
   } catch (error) {
-    console.error('Error scheduling recurring notifications:', error);
+    console.error('❌ Error scheduling recurring notifications:', error);
     throw error;
   }
 }
 
 function scheduleWebNotification(options: ScheduleNotificationOptions): string | null {
   if (!('Notification' in window) || Notification.permission !== 'granted') {
+    console.log('❌ Web notifications not available or not granted');
     return null;
   }
 
   const { title, body, triggerDate, data } = options;
   const timeUntilTrigger = triggerDate.getTime() - Date.now();
+  
+  console.log('🌐 Scheduling web notification for:', timeUntilTrigger, 'ms');
   
   if (timeUntilTrigger <= 0) {
     // Show immediately if time has passed
@@ -365,6 +409,7 @@ function scheduleWebNotification(options: ScheduleNotificationOptions): string |
   }
 
   const timeoutId = setTimeout(() => {
+    console.log('🌐 Showing web notification:', title);
     new Notification(title, {
       body,
       icon: '/favicon.png',
@@ -381,6 +426,8 @@ function scheduleWebNotification(options: ScheduleNotificationOptions): string |
 // Enhanced notification management with better error handling
 export async function cancelNotification(notificationId: string): Promise<void> {
   try {
+    console.log('🗑️ Cancelling notification:', notificationId);
+    
     if (!notificationId) {
       throw new Error('Notification ID is required');
     }
@@ -390,20 +437,24 @@ export async function cancelNotification(notificationId: string): Promise<void> 
         const timeoutId = parseInt(notificationId.replace('web-', ''));
         if (!isNaN(timeoutId)) {
           clearTimeout(timeoutId);
+          console.log('✅ Web notification timeout cleared');
         }
       }
       return;
     }
 
     await Notifications.cancelScheduledNotificationAsync(notificationId);
+    console.log('✅ Notification cancelled successfully');
   } catch (error) {
-    console.error('Error canceling notification:', error);
+    console.error('❌ Error canceling notification:', error);
     throw new Error(`Failed to cancel notification: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 export async function cancelNotificationsByTag(tag: string): Promise<void> {
   try {
+    console.log('🗑️ Cancelling notifications by tag:', tag);
+    
     if (Platform.OS === 'web') {
       // Web doesn't have a direct way to cancel by tag
       return;
@@ -414,26 +465,33 @@ export async function cancelNotificationsByTag(tag: string): Promise<void> {
       notification => notification.content.data?.tag === tag
     );
 
+    console.log(`🗑️ Found ${notificationsToCancel.length} notifications to cancel`);
+
     await Promise.all(
       notificationsToCancel.map(notification => 
         Notifications.cancelScheduledNotificationAsync(notification.identifier)
       )
     );
+    
+    console.log('✅ Notifications cancelled by tag successfully');
   } catch (error) {
-    console.error('Error canceling notifications by tag:', error);
+    console.error('❌ Error canceling notifications by tag:', error);
     throw new Error(`Failed to cancel notifications: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
 export async function cancelAllNotifications(): Promise<void> {
   try {
+    console.log('🗑️ Cancelling all notifications...');
+    
     if (Platform.OS === 'web') {
       return;
     }
 
     await Notifications.cancelAllScheduledNotificationsAsync();
+    console.log('✅ All notifications cancelled successfully');
   } catch (error) {
-    console.error('Error canceling all notifications:', error);
+    console.error('❌ Error canceling all notifications:', error);
     throw new Error(`Failed to cancel all notifications: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
@@ -445,9 +503,11 @@ export async function getScheduledNotifications(): Promise<Notifications.Notific
       return [];
     }
 
-    return await Notifications.getAllScheduledNotificationsAsync();
+    const notifications = await Notifications.getAllScheduledNotificationsAsync();
+    console.log(`📋 Found ${notifications.length} scheduled notifications`);
+    return notifications;
   } catch (error) {
-    console.error('Error getting scheduled notifications:', error);
+    console.error('❌ Error getting scheduled notifications:', error);
     return [];
   }
 }
@@ -462,8 +522,9 @@ export async function updateNotificationBadge(count: number): Promise<void> {
     // Ensure count is a valid number
     const badgeCount = Math.max(0, Math.floor(count));
     await Notifications.setBadgeCountAsync(badgeCount);
+    console.log('✅ Badge count updated to:', badgeCount);
   } catch (error) {
-    console.error('Error updating badge count:', error);
+    console.error('❌ Error updating badge count:', error);
   }
 }
 
@@ -523,7 +584,7 @@ export function formatReminderTime(date: Date): string {
       });
     }
   } catch (error) {
-    console.error('Error formatting reminder time:', error);
+    console.error('❌ Error formatting reminder time:', error);
     return 'Invalid date';
   }
 }
@@ -531,10 +592,15 @@ export function formatReminderTime(date: Date): string {
 // Enhanced notification listeners with better error handling and navigation
 export function initializeNotificationListeners() {
   try {
+    console.log('🎧 Initializing notification listeners...');
+    
     // Handle notification received while app is in foreground
     const foregroundSubscription = Notifications.addNotificationReceivedListener(notification => {
       try {
-        console.log('Notification received in foreground:', notification);
+        console.log('📱 Notification received in foreground:', {
+          title: notification.request.content.title,
+          data: notification.request.content.data
+        });
         
         // Handle badge updates
         const badge = notification.request.content.badge;
@@ -545,17 +611,21 @@ export function initializeNotificationListeners() {
         // Custom handling based on notification type
         const data = notification.request.content.data as NotificationData;
         if (data?.type === 'recurring') {
-          console.log('Recurring notification received:', data);
+          console.log('🔄 Recurring notification received:', data);
         }
       } catch (error) {
-        console.error('Error handling foreground notification:', error);
+        console.error('❌ Error handling foreground notification:', error);
       }
     });
 
     // Handle notification response (user tapped notification)
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
       try {
-        console.log('Notification response:', response);
+        console.log('👆 Notification tapped:', {
+          title: response.notification.request.content.title,
+          data: response.notification.request.content.data
+        });
+        
         const data = response.notification.request.content.data as NotificationData;
         
         // Clear badge when user interacts with notification
@@ -563,33 +633,36 @@ export function initializeNotificationListeners() {
         
         // Handle navigation based on notification data
         if (data?.metadata?.noteId) {
-          console.log('Navigate to note:', data.metadata.noteId);
+          console.log('🧭 Navigate to note:', data.metadata.noteId);
           // Navigate to the specific note
           router.push(`/note/${data.metadata.noteId}`);
         } else if (data?.metadata?.reminderId) {
-          console.log('Navigate to reminders');
+          console.log('🧭 Navigate to reminders');
           // Navigate to reminders screen
           router.push('/(tabs)/reminders');
         } else if (data?.type === 'reminder') {
-          console.log('Navigate to reminders');
+          console.log('🧭 Navigate to reminders');
           // Navigate to reminders screen
           router.push('/(tabs)/reminders');
         }
       } catch (error) {
-        console.error('Error handling notification response:', error);
+        console.error('❌ Error handling notification response:', error);
       }
     });
+
+    console.log('✅ Notification listeners initialized successfully');
 
     return () => {
       try {
         foregroundSubscription.remove();
         responseSubscription.remove();
+        console.log('🧹 Notification listeners cleaned up');
       } catch (error) {
-        console.error('Error removing notification listeners:', error);
+        console.error('❌ Error removing notification listeners:', error);
       }
     };
   } catch (error) {
-    console.error('Error initializing notification listeners:', error);
+    console.error('❌ Error initializing notification listeners:', error);
     return () => {}; // Return empty cleanup function
   }
 }
@@ -597,6 +670,8 @@ export function initializeNotificationListeners() {
 // Notification testing utilities (for development)
 export async function testNotification(): Promise<void> {
   try {
+    console.log('🧪 Testing notification...');
+    
     const { permission } = await registerForPushNotificationsAsync();
     
     if (!permission.granted) {
@@ -614,9 +689,9 @@ export async function testNotification(): Promise<void> {
       },
     });
 
-    console.log('Test notification scheduled successfully');
+    console.log('✅ Test notification scheduled successfully');
   } catch (error) {
-    console.error('Test notification failed:', error);
+    console.error('❌ Test notification failed:', error);
     throw error;
   }
 }
@@ -624,6 +699,8 @@ export async function testNotification(): Promise<void> {
 // Test function - add this at the end of the file
 export async function testLocalNotificationWhenClosed(): Promise<void> {
   try {
+    console.log('🧪 Testing local notification when app is closed...');
+    
     const { permission } = await registerForPushNotificationsAsync();
     
     if (!permission.granted) {

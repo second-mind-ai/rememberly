@@ -6,9 +6,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Alert,
-  Modal,
   TextInput,
+  Modal,
+  Alert,
+  BackHandler,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,9 +17,11 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { getCurrentUser } from '@/lib/auth';
 import { useReminderStore } from '@/lib/reminderStore';
 import { useNotesStore } from '@/lib/store';
+import { useToast } from '@/hooks/useToast';
+import { Toast } from '@/components/Toast';
 import { registerForPushNotificationsAsync, formatReminderTime, testLocalNotificationWhenClosed } from '@/lib/notifications';
 import { testSupabaseConnection } from '@/lib/supabase';
-import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2, FileText, Link2, Image as ImageIcon, File } from 'lucide-react-native';
+import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2, FileText, Link2, Image as ImageIcon, File, CheckCircle, BellOff } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 type Priority = 'low' | 'medium' | 'high';
@@ -40,10 +43,13 @@ export default function RemindersScreen() {
     completeReminder, 
     deleteReminder,
     snoozeReminder,
+    markAsRead,
+    clearNotification,
     error 
   } = useReminderStore();
   
   const { notes } = useNotesStore();
+  const { toast, showSuccess, showError, hideToast } = useToast();
   
   const [refreshing, setRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -70,6 +76,26 @@ export default function RemindersScreen() {
   useEffect(() => {
     checkAuthAndInitialize();
   }, []);
+
+  // Handle hardware/system back button
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (showAddModal) {
+          if (isMounted.current) {
+            setShowAddModal(false);
+          }
+          return true; // Prevent default behavior
+        }
+        
+        return false; // Allow default behavior (exit app or go to previous screen)
+      };
+
+      const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+      return () => subscription.remove();
+    }, [showAddModal])
+  );
 
   async function checkAuthAndInitialize() {
     try {
@@ -134,12 +160,12 @@ export default function RemindersScreen() {
 
   async function handleCreateReminder() {
     if (!formData.title.trim()) {
-      Alert.alert('Error', 'Please enter a reminder title');
+      showError('Please enter a reminder title');
       return;
     }
 
     if (formData.dateTime <= new Date()) {
-      Alert.alert('Error', 'Please select a future date and time');
+      showError('Please select a future date and time');
       return;
     }
 
@@ -158,11 +184,11 @@ export default function RemindersScreen() {
                   setHasPermission(permission.granted);
                 }
                 if (!permission.granted) {
-                  Alert.alert('Error', 'Notifications are required for reminders to work');
+                  showError('Notifications are required for reminders to work');
                   return;
                 }
               } catch (error) {
-                Alert.alert('Error', 'Failed to enable notifications');
+                showError('Failed to enable notifications');
                 return;
               }
             }
@@ -180,18 +206,63 @@ export default function RemindersScreen() {
         priority: formData.priority,
       });
 
-      Alert.alert(
-        'Reminder Created',
-        `You'll be reminded on ${formData.dateTime.toLocaleDateString()} at ${formData.dateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-      );
+      const formattedDate = formData.dateTime.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+      const formattedTime = formData.dateTime.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      
+      showSuccess(`Reminder set for ${formattedDate} at ${formattedTime}`);
 
       resetForm();
-      if (isMounted.current) {
-        setShowAddModal(false);
-      }
+      
+      // Auto-close modal after a brief delay
+      setTimeout(() => {
+        if (isMounted.current) {
+          setShowAddModal(false);
+        }
+      }, 500);
     } catch (error) {
-      Alert.alert('Error', 'Failed to create reminder');
+      console.error('Failed to create reminder:', error);
+      showError('Failed to create reminder. Please try again.');
     }
+  }
+
+  async function handleMarkAsRead(id: string, title: string) {
+    try {
+      await markAsRead(id);
+      showSuccess(`"${title}" marked as read`);
+    } catch (error) {
+      console.error('Failed to mark as read:', error);
+      showError('Failed to mark reminder as read');
+    }
+  }
+
+  async function handleClearNotification(id: string, title: string) {
+    Alert.alert(
+      'Clear Notification',
+      `Remove "${title}" from your reminders?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Clear', 
+          onPress: async () => {
+            try {
+              await clearNotification(id);
+              showSuccess('Notification cleared');
+            } catch (error) {
+              console.error('Failed to clear notification:', error);
+              showError('Failed to clear notification');
+            }
+          },
+          style: 'destructive'
+        }
+      ]
+    );
   }
 
   async function handleCompleteReminder(id: string, title: string) {
@@ -202,7 +273,15 @@ export default function RemindersScreen() {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Complete', 
-          onPress: () => completeReminder(id),
+          onPress: async () => {
+            try {
+              await completeReminder(id);
+              showSuccess('Reminder completed');
+            } catch (error) {
+              console.error('Failed to complete reminder:', error);
+              showError('Failed to complete reminder');
+            }
+          },
           style: 'default'
         }
       ]
@@ -217,7 +296,15 @@ export default function RemindersScreen() {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Delete', 
-          onPress: () => deleteReminder(id),
+          onPress: async () => {
+            try {
+              await deleteReminder(id);
+              showSuccess('Reminder deleted');
+            } catch (error) {
+              console.error('Failed to delete reminder:', error);
+              showError('Failed to delete reminder');
+            }
+          },
           style: 'destructive'
         }
       ]
@@ -230,9 +317,42 @@ export default function RemindersScreen() {
       `Snooze "${title}" for how long?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: '15 minutes', onPress: () => snoozeReminder(id, 15) },
-        { text: '1 hour', onPress: () => snoozeReminder(id, 60) },
-        { text: '1 day', onPress: () => snoozeReminder(id, 24 * 60) },
+        { 
+          text: '15 minutes', 
+          onPress: async () => {
+            try {
+              await snoozeReminder(id, 15);
+              showSuccess('Reminder snoozed for 15 minutes');
+            } catch (error) {
+              console.error('Failed to snooze reminder:', error);
+              showError('Failed to snooze reminder');
+            }
+          }
+        },
+        { 
+          text: '1 hour', 
+          onPress: async () => {
+            try {
+              await snoozeReminder(id, 60);
+              showSuccess('Reminder snoozed for 1 hour');
+            } catch (error) {
+              console.error('Failed to snooze reminder:', error);
+              showError('Failed to snooze reminder');
+            }
+          }
+        },
+        { 
+          text: '1 day', 
+          onPress: async () => {
+            try {
+              await snoozeReminder(id, 24 * 60);
+              showSuccess('Reminder snoozed for 1 day');
+            } catch (error) {
+              console.error('Failed to snooze reminder:', error);
+              showError('Failed to snooze reminder');
+            }
+          }
+        },
       ]
     );
   }
@@ -304,6 +424,14 @@ export default function RemindersScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Toast Component */}
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={hideToast}
+      />
+
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.title}>Reminders</Text>
@@ -326,8 +454,13 @@ export default function RemindersScreen() {
                 if (isMounted.current) {
                   setHasPermission(permission.granted);
                 }
+                if (permission.granted) {
+                  showSuccess('Notifications enabled successfully');
+                } else {
+                  showError('Failed to enable notifications');
+                }
               } catch (error) {
-                Alert.alert('Error', 'Failed to enable notifications');
+                showError('Failed to enable notifications');
               }
             }}
           >
@@ -346,13 +479,9 @@ export default function RemindersScreen() {
               onPress={async () => {
                 try {
                   await testLocalNotificationWhenClosed();
-                  Alert.alert(
-                    '🧪 Test Started!', 
-                    'Notification scheduled for 10 seconds.\n\nClose the app NOW and wait!',
-                    [{ text: 'Got it!' }]
-                  );
+                  showInfo('Test notification scheduled for 10 seconds. Close the app now!');
                 } catch (error) {
-                  Alert.alert('Test Failed', 'Could not schedule test notification');
+                  showError('Could not schedule test notification');
                 }
               }}
             >
@@ -364,15 +493,13 @@ export default function RemindersScreen() {
               onPress={async () => {
                 try {
                   const result = await testSupabaseConnection();
-                  Alert.alert(
-                    result.success ? '✅ Connection Successful' : '❌ Connection Failed',
-                    result.success 
-                      ? 'Supabase is connected and working!'
-                      : `Error: ${result.error}`,
-                    [{ text: 'OK' }]
-                  );
+                  if (result.success) {
+                    showSuccess('Supabase connection successful!');
+                  } else {
+                    showError(`Supabase error: ${result.error}`);
+                  }
                 } catch (error) {
-                  Alert.alert('Connection Test Failed', 'Could not test Supabase connection');
+                  showError('Could not test Supabase connection');
                 }
               }}
             >
@@ -411,6 +538,8 @@ export default function RemindersScreen() {
                   onComplete={handleCompleteReminder}
                   onDelete={handleDeleteReminder}
                   onSnooze={handleSnoozeReminder}
+                  onMarkAsRead={handleMarkAsRead}
+                  onClearNotification={handleClearNotification}
                   onNavigateToNote={handleNavigateToNote}
                   priorityColors={priorityColors}
                   notes={notes}
@@ -437,6 +566,8 @@ export default function RemindersScreen() {
                   onComplete={handleCompleteReminder}
                   onDelete={handleDeleteReminder}
                   onSnooze={handleSnoozeReminder}
+                  onMarkAsRead={handleMarkAsRead}
+                  onClearNotification={handleClearNotification}
                   onNavigateToNote={handleNavigateToNote}
                   priorityColors={priorityColors}
                   notes={notes}
@@ -623,6 +754,8 @@ interface ReminderCardProps {
   onComplete: (id: string, title: string) => void;
   onDelete: (id: string, title: string) => void;
   onSnooze: (id: string, title: string) => void;
+  onMarkAsRead: (id: string, title: string) => void;
+  onClearNotification: (id: string, title: string) => void;
   onNavigateToNote: (noteId: string) => void;
   priorityColors: any;
   notes: any[];
@@ -634,6 +767,8 @@ function ReminderCard({
   onComplete, 
   onDelete, 
   onSnooze, 
+  onMarkAsRead,
+  onClearNotification,
   onNavigateToNote,
   priorityColors,
   notes 
@@ -719,22 +854,40 @@ function ReminderCard({
         </Text>
         
         <View style={styles.reminderActions}>
+          {/* Mark as Read Button */}
+          <TouchableOpacity
+            style={[styles.actionButton, styles.readButton]}
+            onPress={() => onMarkAsRead(reminder.id, reminder.title)}
+          >
+            <CheckCircle size={16} color="#059669" strokeWidth={2} />
+          </TouchableOpacity>
+
+          {/* Clear Notification Button */}
+          <TouchableOpacity
+            style={[styles.actionButton, styles.clearButton]}
+            onPress={() => onClearNotification(reminder.id, reminder.title)}
+          >
+            <BellOff size={16} color="#6B7280" strokeWidth={2} />
+          </TouchableOpacity>
+
           {isOverdue && (
             <TouchableOpacity
-              style={styles.actionButton}
+              style={[styles.actionButton, styles.snoozeButton]}
               onPress={() => onSnooze(reminder.id, reminder.title)}
             >
               <Clock size={16} color="#D97706" strokeWidth={2} />
             </TouchableOpacity>
           )}
+          
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[styles.actionButton, styles.completeButton]}
             onPress={() => onComplete(reminder.id, reminder.title)}
           >
             <Check size={16} color="#059669" strokeWidth={2} />
           </TouchableOpacity>
+          
           <TouchableOpacity
-            style={styles.actionButton}
+            style={[styles.actionButton, styles.deleteButton]}
             onPress={() => onDelete(reminder.id, reminder.title)}
           >
             <Trash2 size={16} color="#DC2626" strokeWidth={2} />
@@ -956,6 +1109,21 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 6,
     backgroundColor: '#F9FAFB',
+  },
+  readButton: {
+    backgroundColor: '#F0FDF4',
+  },
+  clearButton: {
+    backgroundColor: '#F8FAFC',
+  },
+  snoozeButton: {
+    backgroundColor: '#FEF3C7',
+  },
+  completeButton: {
+    backgroundColor: '#F0FDF4',
+  },
+  deleteButton: {
+    backgroundColor: '#FEF2F2',
   },
   emptyState: {
     alignItems: 'center',
