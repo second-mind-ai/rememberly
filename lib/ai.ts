@@ -1,6 +1,5 @@
-// Enhanced AI service with real GPT-4 integration for superior content analysis
-const OPENAI_API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+// Enhanced AI service with secure Edge Function integration
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 
 export async function summarizeContent(
   content: string,
@@ -27,37 +26,22 @@ export async function summarizeContent(
       }
     }
 
-    // Use real AI analysis if API key is available and valid, otherwise fallback to enhanced local analysis
-    if (
-      OPENAI_API_KEY &&
-      OPENAI_API_KEY.trim() !== '' &&
-      OPENAI_API_KEY !== 'your_openai_api_key_here'
-    ) {
-      try {
-        const result = await analyzeWithGPT4(finalContent, type, imageUrl);
+    // Use secure Edge Function for AI analysis
+    try {
+      const result = await analyzeWithEdgeFunction(finalContent, type, imageUrl);
 
-        // Ensure minimum processing time for better UX
-        const processingTime = Date.now() - startTime;
-        if (processingTime < 1500) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, 1500 - processingTime)
-          );
-        }
-
-        return result;
-      } catch (error) {
-        console.warn(
-          'GPT-4 analysis failed, falling back to local analysis:',
-          error
+      // Ensure minimum processing time for better UX
+      const processingTime = Date.now() - startTime;
+      if (processingTime < 1500) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1500 - processingTime)
         );
-        // Fallback to local analysis on API error
-        return await performEnhancedLocalAnalysis(finalContent, type, imageUrl);
       }
-    } else {
-      // Fallback to enhanced local analysis
-      console.log(
-        'OpenAI API key not configured or invalid, using enhanced local analysis'
-      );
+
+      return result;
+    } catch (error) {
+      console.warn('Edge Function analysis failed, falling back to local analysis:', error);
+      // Fallback to local analysis on API error
       return await performEnhancedLocalAnalysis(finalContent, type, imageUrl);
     }
   } catch (error) {
@@ -67,7 +51,7 @@ export async function summarizeContent(
   }
 }
 
-async function analyzeWithGPT4(
+async function analyzeWithEdgeFunction(
   content: string,
   type: string,
   imageUrl?: string
@@ -77,143 +61,58 @@ async function analyzeWithGPT4(
   tags: string[];
 }> {
   try {
-    const messages = [
-      {
-        role: 'system',
-        content:
-          "You are an intelligent content analyzer designed to process notes in any domain, including images. Your core tasks are: Generate optimized, context-aware titles that are clear, engaging, and summarize the main idea. Write concise summaries that capture key points in a readable and informative way. Extract relevant, searchable tags that help organize and retrieve the note easily. For images, describe what you see and extract meaningful insights. You must analyze the input deeply, understand the full context, and always respond in the **same language as the user's input**, with special support for Arabic (ar) and other multilingual content. Your outputs must be: Title: 1 line, compelling and context-representative. Summary: 2–3 sentences capturing the core insight. Tags: 3–7 keywords, comma-separated, no hashtags.",
-      }
-    ];
-
-    // Handle image content with vision capabilities
-    if (type === 'image' && imageUrl) {
-      messages.push({
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: `Analyze this image and provide a JSON response with exactly this structure:
-
-{
-  "title": "A smart, engaging title describing the image (max 8 words)",
-  "summary": "A clear, concise summary describing what's in the image and its significance (2-4 sentences)",
-  "tags": ["array", "of", "relevant", "tags", "describing", "image", "content", "max", "10", "tags"]
-}
-
-Additional context: ${content}
-
-Requirements:
-- Title should describe what's in the image
-- Summary should explain the image content and any visible text or important details
-- Tags should include visual elements, objects, themes, and relevant keywords
-- Focus on making this useful for someone organizing their visual notes
-- Ensure the response is valid JSON only`
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: imageUrl,
-              detail: 'high'
-            }
-          }
-        ]
-      });
-    } else {
-      // Handle text content
-      const prompt = createAnalysisPrompt(content, type);
-      messages.push({
-        role: 'user',
-        content: prompt,
-      });
+    // Get current user session for authentication
+    const { getCurrentUser } = await import('./auth');
+    const { user } = await getCurrentUser();
+    
+    if (!user) {
+      throw new Error('User not authenticated');
     }
 
-    // Use gpt-4o for images (vision capabilities), gpt-4o-mini for text/URLs (cost-effective)
-    const model = (type === 'image' && imageUrl) ? 'gpt-4o' : 'gpt-4o-mini';
+    // Get user's session token
+    const { supabase } = await import('./supabase');
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
+      throw new Error('No valid session token');
+    }
 
-    const response = await fetch(OPENAI_API_URL, {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/ai-analysis`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'Authorization': `Bearer ${session.access_token}`,
       },
       body: JSON.stringify({
-        model: model,
-        messages: messages,
-        max_tokens: 500,
-        temperature: 0.3,
+        content,
+        type,
+        imageUrl,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.warn('OpenAI API error response:', errorText);
-      throw new Error(
-        `OpenAI API rate limit exceeded. Please try again later.`
-      );
+      console.warn('Edge Function error response:', errorText);
+      
+      if (response.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again in a moment.');
+      } else if (response.status === 401) {
+        throw new Error('Authentication failed. Please sign in again.');
+      } else {
+        throw new Error(`Analysis service temporarily unavailable. Please try again later.`);
+      }
     }
 
     const data = await response.json();
-    const aiResponse = data.choices[0]?.message?.content;
-
-    if (!aiResponse) {
-      throw new Error('No response from OpenAI');
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Analysis failed');
     }
 
-    return parseAIResponse(aiResponse);
+    return data.data;
   } catch (error) {
-    console.warn('GPT-4 analysis error:', error);
+    console.warn('Edge Function analysis error:', error);
     throw error;
-  }
-}
-
-function createAnalysisPrompt(content: string, type: string): string {
-  const contentPreview =
-    content.length > 2000 ? content.substring(0, 2000) + '...' : content;
-
-  return `Analyze this ${type} content and provide a JSON response with exactly this structure:
-
-{
-  "title": "A smart, engaging title (max 8 words)",
-  "summary": "A clear, concise summary (2-4 sentences) that captures the main points",
-  "tags": ["array", "of", "relevant", "tags", "max", "10", "tags"]
-}
-
-Content to analyze:
-${contentPreview}
-
-Requirements:
-- Title should be descriptive, engaging, and human-readable
-- Summary should be conversational and highlight key insights
-- Tags should include topics, categories, and relevant keywords
-- Focus on making this useful for someone organizing their notes
-- Ensure the response is valid JSON only`;
-}
-
-function parseAIResponse(response: string): {
-  title: string;
-  summary: string;
-  tags: string[];
-} {
-  try {
-    // Clean the response to ensure it's valid JSON
-    const cleanResponse = response.trim();
-    const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
-
-    if (!jsonMatch) {
-      throw new Error('No JSON found in response');
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-
-    // Validate and clean the response
-    return {
-      title: (parsed.title || 'Untitled Note').substring(0, 100),
-      summary: (parsed.summary || 'No summary available').substring(0, 500),
-      tags: Array.isArray(parsed.tags) ? parsed.tags.slice(0, 10) : ['note'],
-    };
-  } catch (error) {
-    console.error('Error parsing AI response:', error);
-    throw new Error('Invalid AI response format');
   }
 }
 
