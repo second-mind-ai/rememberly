@@ -13,6 +13,7 @@ interface NotesState {
   // Actions
   fetchNotes: () => Promise<void>;
   fetchReminders: () => Promise<void>;
+  fetchAll: () => Promise<void>;
   createNote: (
     note: Omit<Note, 'id' | 'user_id' | 'created_at' | 'updated_at'>
   ) => Promise<Note | null>;
@@ -34,6 +35,13 @@ export const useNotesStore = create<NotesState>((set, get) => ({
   fetchNotes: async () => {
     try {
       set({ loading: true, error: null });
+      
+      // Check authentication first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
       const { data, error } = await supabase
         .from('notes')
         .select('*')
@@ -42,13 +50,22 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       if (error) throw error;
       set({ notes: data || [], loading: false });
     } catch (error) {
-      set({ error: (error as Error).message, loading: false });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch notes';
+      set({ error: errorMessage, loading: false });
+      console.error('Error fetching notes:', error);
     }
   },
 
   fetchReminders: async () => {
     try {
       set({ loading: true, error: null });
+      
+      // Check authentication first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      
       const { data, error } = await supabase
         .from('reminders')
         .select('*, notes!inner(*)')
@@ -58,8 +75,17 @@ export const useNotesStore = create<NotesState>((set, get) => ({
       if (error) throw error;
       set({ reminders: data || [], loading: false });
     } catch (error) {
-      set({ error: (error as Error).message, loading: false });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch reminders';
+      set({ error: errorMessage, loading: false });
+      console.error('Error fetching reminders:', error);
     }
+  },
+
+  // Add a method to fetch both in parallel
+  fetchAll: async () => {
+    const notesPromise = get().fetchNotes();
+    const remindersPromise = get().fetchReminders();
+    await Promise.all([notesPromise, remindersPromise]);
   },
 
   createNote: async (noteData) => {

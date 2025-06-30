@@ -1,51 +1,66 @@
-import { useEffect } from 'react';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { initializeNotificationListeners } from '@/lib/notifications';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { NetworkStatus } from '@/components/NetworkStatus';
 
+// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  useFrameworkReady();
-
-  const [fontsLoaded, fontError] = useFonts({
-    'Inter-Regular': Inter_400Regular,
-    'Inter-Medium': Inter_500Medium,
-    'Inter-SemiBold': Inter_600SemiBold,
-    'Inter-Bold': Inter_700Bold,
+  const [loaded] = useFonts({
+    // Using system fonts since SpaceMono font file doesn't exist
   });
 
+  const frameworkReady = useFrameworkReady();
+
   useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
+    let initCompleted = false;
+
+    async function setupApp() {
+      try {
+        if (loaded && frameworkReady && !initCompleted) {
+          initCompleted = true;
+
+          // Initialize notification listeners
+          initializeNotificationListeners();
+
+          // Hide splash screen
+          await SplashScreen.hideAsync();
+        }
+      } catch (error) {
+        console.error('❌ App setup error:', error);
+        // Still hide splash screen even if setup fails
+        await SplashScreen.hideAsync();
+      }
     }
-  }, [fontsLoaded, fontError]);
 
-  useEffect(() => {
-    // Initialize notification listeners
-    const cleanup = initializeNotificationListeners();
-    return cleanup;
-  }, []);
+    setupApp();
+  }, [loaded, frameworkReady]);
 
-  if (!fontsLoaded && !fontError) {
+  if (!loaded || !frameworkReady) {
     return null;
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="auth" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-        <StatusBar style="auto" />
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <NetworkStatus />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="auth" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          <StatusBar style="auto" />
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }

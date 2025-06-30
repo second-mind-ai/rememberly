@@ -9,9 +9,10 @@ import {
   Alert,
   ActivityIndicator,
   Image,
-  Dimensions,
   Modal,
   Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -20,9 +21,9 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useNotesStore } from '@/lib/store';
 import { summarizeContent, fetchUrlContent } from '@/lib/ai';
+import { uploadImage, uploadDocument, validateFile, formatFileSize } from '@/lib/storage';
 import {
   FileText,
-  Link2,
   Image as ImageIcon,
   Camera,
   Upload,
@@ -30,11 +31,11 @@ import {
   Sparkles,
   Check,
   X,
-  Zap,
-  Star,
-  AlertCircle,
   CheckCircle,
+  Cloud,
+  CloudUpload,
 } from 'lucide-react-native';
+import { theme } from '@/lib/theme';
 
 type NoteType = 'text' | 'url' | 'file' | 'image';
 
@@ -59,18 +60,20 @@ function extractFirstUrl(text: string): string | null {
   return match ? match[0] : null;
 }
 
-const { width } = Dimensions.get('window');
+// const { width } = Dimensions.get('window'); // Commented out as not used
 
 export default function CreateScreen() {
   const [activeTab, setActiveTab] = useState<NoteType>('text');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [aiPreview, setAiPreview] = useState<AIPreview | null>(null);
   const [showAiPreview, setShowAiPreview] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
   const [customSummary, setCustomSummary] = useState('');
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
+  const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [scaleAnim] = useState(new Animated.Value(0.8));
@@ -83,7 +86,7 @@ export default function CreateScreen() {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 300,
+        duration: theme.animation.duration.normal,
         useNativeDriver: true,
       }),
       Animated.spring(scaleAnim, {
@@ -104,12 +107,12 @@ export default function CreateScreen() {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 0,
-        duration: 200,
+        duration: theme.animation.duration.fast,
         useNativeDriver: true,
       }),
       Animated.timing(scaleAnim, {
         toValue: 0.8,
-        duration: 200,
+        duration: theme.animation.duration.fast,
         useNativeDriver: true,
       }),
     ]).start(() => {
@@ -131,14 +134,60 @@ export default function CreateScreen() {
     }
   }
 
+  async function uploadFileToStorage(fileInfo: FileInfo): Promise<string | null> {
+    try {
+      setUploading(true);
+      
+      // Validate file first
+      const validation = validateFile(
+        { name: fileInfo.name, size: fileInfo.size },
+        20 * 1024 * 1024, // 20MB limit
+        // Allow common file types
+        activeTab === 'image' 
+          ? ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']
+          : undefined // Allow all types for documents
+      );
+
+      if (!validation.valid) {
+        Alert.alert('File Error', validation.error);
+        return null;
+      }
+
+      console.log('📁 Uploading file:', fileInfo.name);
+
+      // Upload based on type
+      const uploadResult = activeTab === 'image' 
+        ? await uploadImage(fileInfo.uri, fileInfo.name)
+        : await uploadDocument(fileInfo.uri, fileInfo.name);
+
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
+
+      console.log('✅ File uploaded successfully:', uploadResult.url);
+      return uploadResult.url!;
+
+    } catch (error) {
+      console.error('❌ File upload error:', error);
+      Alert.alert(
+        'Upload Error', 
+        error instanceof Error ? error.message : 'Failed to upload file'
+      );
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function extractFileContent(
     fileUri: string,
-    fileName: string
+    fileName: string,
+    uploadedUrl?: string
   ): Promise<string> {
     try {
       // For images, return a description that can be analyzed
       if (activeTab === 'image') {
-        return `Image file: ${fileName}\nThis is an image that has been uploaded to the note. The image can be viewed in the note details.`;
+        return `Image file: ${fileName}\nUploaded to: ${uploadedUrl || 'cloud storage'}\nThis is an image that has been uploaded to the note. The image can be viewed in the note details.`;
       }
 
       // For text files, try to read the content
@@ -149,7 +198,7 @@ export default function CreateScreen() {
       ) {
         try {
           const fileContent = await FileSystem.readAsStringAsync(fileUri);
-          return `File: ${fileName}\n\nContent:\n${fileContent}`;
+          return `File: ${fileName}\nUploaded to: ${uploadedUrl || 'cloud storage'}\n\nContent:\n${fileContent}`;
         } catch (error) {
           console.log('Could not read file content:', error);
         }
@@ -161,12 +210,12 @@ export default function CreateScreen() {
         fileInfo.exists && !fileInfo.isDirectory && 'size' in fileInfo
           ? fileInfo.size
           : null;
-      return `File: ${fileName}\nSize: ${
-        fileSize ? Math.round(fileSize / 1024) : 'Unknown'
-      } KB\nType: ${activeTab}\n\nThis file has been attached to the note and can be accessed from the note details.`;
+      return `File: ${fileName}\nUploaded to: ${uploadedUrl || 'cloud storage'}\nSize: ${
+        fileSize ? formatFileSize(fileSize) : 'Unknown'
+      }\nType: ${activeTab}\n\nThis file has been uploaded and can be accessed from the note details.`;
     } catch (error) {
       console.error('Error extracting file content:', error);
-      return `File: ${fileName}\nThis file has been attached to the note.`;
+      return `File: ${fileName}\nUploaded to: ${uploadedUrl || 'cloud storage'}\nThis file has been uploaded to the note.`;
     }
   }
 
@@ -182,12 +231,24 @@ export default function CreateScreen() {
     setAnalyzing(true);
     try {
       let finalContent = content;
+      let fileUrl = uploadedFileUrl;
+
+      // Handle file upload if needed
+      if (selectedFile && !uploadedFileUrl) {
+        fileUrl = await uploadFileToStorage(selectedFile);
+        if (!fileUrl) {
+          setAnalyzing(false);
+          return; // Upload failed, error already shown
+        }
+        setUploadedFileUrl(fileUrl);
+      }
 
       // Handle different content types
       if (activeTab === 'url' && content.trim()) {
         try {
           finalContent = await fetchUrlContent(content);
         } catch (error) {
+          console.error('URL fetch error:', error);
           Alert.alert(
             'Error',
             'Could not fetch URL content. Please check the URL and try again.'
@@ -201,7 +262,8 @@ export default function CreateScreen() {
       ) {
         finalContent = await extractFileContent(
           selectedFile.uri,
-          selectedFile.name
+          selectedFile.name,
+          fileUrl || undefined
         );
       } else if (!content.trim()) {
         Alert.alert('Error', 'Please enter some content to analyze');
@@ -210,7 +272,7 @@ export default function CreateScreen() {
       }
 
       // Get AI analysis
-      const aiResult = await summarizeContent(finalContent, activeTab);
+      const aiResult = await summarizeContent(finalContent, activeTab, fileUrl || undefined);
 
       setAiPreview(aiResult);
       setCustomTitle(aiResult.title);
@@ -233,8 +295,18 @@ export default function CreateScreen() {
     setLoading(true);
     try {
       let finalContent = content;
-      let fileUrl = null;
+      let fileUrl = uploadedFileUrl;
       let aiResult = aiPreview;
+
+      // Handle file upload if not already uploaded
+      if (selectedFile && !uploadedFileUrl) {
+        fileUrl = await uploadFileToStorage(selectedFile);
+        if (!fileUrl) {
+          setLoading(false);
+          return; // Upload failed, error already shown
+        }
+        setUploadedFileUrl(fileUrl);
+      }
 
       // If no AI preview exists, analyze first
       if (!aiResult) {
@@ -245,6 +317,7 @@ export default function CreateScreen() {
             try {
               finalContent = await fetchUrlContent(content);
             } catch (error) {
+              console.error('URL fetch error in create:', error);
               Alert.alert(
                 'Error',
                 'Could not fetch URL content. Please check the URL and try again.'
@@ -259,7 +332,8 @@ export default function CreateScreen() {
           ) {
             finalContent = await extractFileContent(
               selectedFile.uri,
-              selectedFile.name
+              selectedFile.name,
+              fileUrl || undefined
             );
           } else if (!content.trim()) {
             Alert.alert('Error', 'Please enter some content to analyze');
@@ -269,7 +343,7 @@ export default function CreateScreen() {
           }
 
           // Get AI analysis
-          aiResult = await summarizeContent(finalContent, activeTab);
+          aiResult = await summarizeContent(finalContent, activeTab, fileUrl || undefined);
           setAiPreview(aiResult);
           setCustomTitle(aiResult.title);
           setCustomSummary(aiResult.summary);
@@ -294,6 +368,7 @@ export default function CreateScreen() {
         try {
           finalContent = await fetchUrlContent(content);
         } catch (error) {
+          console.error('URL content fetch error:', error);
           Alert.alert('Error', 'Could not fetch URL content');
           setLoading(false);
           return;
@@ -305,10 +380,10 @@ export default function CreateScreen() {
         if (!finalContent.includes('File:')) {
           finalContent = await extractFileContent(
             selectedFile.uri,
-            selectedFile.name
+            selectedFile.name,
+            fileUrl || undefined
           );
         }
-        fileUrl = selectedFile.uri; // Store the local file URI for now
       }
 
       // Create note with AI-generated or custom data
@@ -319,7 +394,7 @@ export default function CreateScreen() {
         type: activeTab,
         tags: aiResult.tags,
         source_url: extractFirstUrl(finalContent),
-        file_url: fileUrl,
+        file_url: fileUrl, // Use the uploaded file URL
       };
 
       const newNote = await createNote(noteData);
@@ -345,6 +420,7 @@ export default function CreateScreen() {
     setCustomTitle('');
     setCustomSummary('');
     setSelectedFile(null);
+    setUploadedFileUrl(null);
   }
 
   function handleDiscardPreview() {
@@ -372,9 +448,10 @@ export default function CreateScreen() {
       });
       setContent(''); // Clear text content when file is selected
       setActiveTab('image');
-      // Clear any existing AI preview since content changed
+      // Clear any existing AI preview and uploaded URL since content changed
       setAiPreview(null);
       setShowAiPreview(false);
+      setUploadedFileUrl(null);
     }
   }
 
@@ -404,9 +481,10 @@ export default function CreateScreen() {
       });
       setContent(''); // Clear text content when file is selected
       setActiveTab('image');
-      // Clear any existing AI preview since content changed
+      // Clear any existing AI preview and uploaded URL since content changed
       setAiPreview(null);
       setShowAiPreview(false);
+      setUploadedFileUrl(null);
     }
   }
 
@@ -428,286 +506,245 @@ export default function CreateScreen() {
         });
         setContent(''); // Clear text content when file is selected
         setActiveTab('file');
-        // Clear any existing AI preview since content changed
+        // Clear any existing AI preview and uploaded URL since content changed
         setAiPreview(null);
         setShowAiPreview(false);
+        setUploadedFileUrl(null);
       }
     } catch (error) {
+      console.error('Document picker error:', error);
       Alert.alert('Error', 'Failed to pick document');
     }
   }
 
-  const canAnalyze = (content.trim() || selectedFile) && !analyzing && !loading;
-  const canCreate = (content.trim() || selectedFile) && !analyzing && !loading;
-
-  const renderFilePreview = () => {
-    if (!selectedFile) return null;
-
-    if (activeTab === 'image') {
-      return (
-        <View style={styles.imagePreviewContainer}>
-          <Image
-            source={{ uri: selectedFile.uri }}
-            style={styles.imagePreview}
-          />
-          <View style={styles.fileInfo}>
-            <Text style={styles.fileName} numberOfLines={1}>
-              {selectedFile.name}
-            </Text>
-            {selectedFile.size && (
-              <Text style={styles.fileSize}>
-                {(selectedFile.size / 1024 / 1024).toFixed(1)} MB
-              </Text>
-            )}
-          </View>
-          <TouchableOpacity
-            style={styles.removeFileButton}
-            onPress={() => {
-              setSelectedFile(null);
-              setActiveTab('text');
-            }}
-          >
-            <X size={16} color="#EF4444" strokeWidth={2} />
-          </TouchableOpacity>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.filePreviewContainer}>
-        <FileText size={32} color="#6B7280" strokeWidth={1.5} />
-        <View style={styles.fileInfo}>
-          <Text style={styles.fileName} numberOfLines={1}>
-            {selectedFile.name}
-          </Text>
-          {selectedFile.size && (
-            <Text style={styles.fileSize}>
-              {selectedFile.size > 1024 * 1024
-                ? `${(selectedFile.size / 1024 / 1024).toFixed(1)} MB`
-                : `${(selectedFile.size / 1024).toFixed(0)} KB`}
-            </Text>
-          )}
-          {selectedFile.mimeType && (
-            <Text style={styles.fileType}>{selectedFile.mimeType}</Text>
-          )}
-        </View>
-        <TouchableOpacity
-          style={styles.removeFileButton}
-          onPress={() => {
-            setSelectedFile(null);
-            setActiveTab('text');
-          }}
-        >
-          <X size={16} color="#EF4444" strokeWidth={2} />
-        </TouchableOpacity>
-      </View>
-    );
-  };
+  const canAnalyze = (content.trim() || selectedFile) && !analyzing && !loading && !uploading;
+  const canCreate = (content.trim() || selectedFile) && !analyzing && !loading && !uploading;
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Text style={styles.title}>Create Note</Text>
-          <View style={styles.aiIndicator}>
-            <Brain size={16} color="#7C3AED" strokeWidth={2} />
-            <Text style={styles.aiIndicatorText}>AI-Powered</Text>
-          </View>
-        </View>
-        <Text style={styles.subtitle}>
-          AI will automatically analyze and organize your content
-        </Text>
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.inputSection}>
-          <Text style={styles.inputLabel}>Enter your content</Text>
-
-          {/* File Preview */}
-          {selectedFile && renderFilePreview()}
-
-          <View style={styles.inputContainer}>
-            <TextInput
-              style={styles.textInput}
-              value={content}
-              onChangeText={handleContentChange}
-              placeholder={
-                selectedFile
-                  ? 'Add additional notes about this file (optional)...'
-                  : activeTab === 'url'
-                  ? 'Paste a URL (e.g., https://example.com/article)...'
-                  : 'Type your content here...'
-              }
-              placeholderTextColor="#9CA3AF"
-              multiline
-              textAlignVertical="top"
-              keyboardType={activeTab === 'url' ? 'url' : 'default'}
-              autoCapitalize={activeTab === 'url' ? 'none' : 'sentences'}
-              autoCorrect={activeTab !== 'url'}
-            />
-            <View style={styles.inputActions}>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  activeTab === 'file' && styles.actionButtonActive,
-                ]}
-                onPress={handleDocumentPicker}
-              >
-                <Upload
-                  size={20}
-                  color={activeTab === 'file' ? '#2563EB' : '#6B7280'}
-                  strokeWidth={2}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  activeTab === 'image' && styles.actionButtonActive,
-                ]}
-                onPress={handleImagePicker}
-              >
-                <ImageIcon
-                  size={20}
-                  color={activeTab === 'image' ? '#2563EB' : '#6B7280'}
-                  strokeWidth={2}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        {analyzing && (
-          <View style={styles.loadingSection}>
-            <Sparkles size={32} color="#7C3AED" strokeWidth={2} />
-            <Text style={styles.loadingText}>
-              AI is analyzing your{' '}
-              {activeTab === 'image'
-                ? 'image'
-                : activeTab === 'file'
-                ? 'file'
-                : 'content'}
-              ...
-            </Text>
-            <Text style={styles.loadingSubtext}>
-              Generating perfect title, summary, and tags
-            </Text>
-            <View style={styles.loadingSteps}>
-              <Text style={styles.loadingStep}>
-                ✓ Reading {activeTab} structure
-              </Text>
-              <Text style={styles.loadingStep}>
-                ✓ Understanding context and meaning
-              </Text>
-              <Text style={styles.loadingStep}>
-                ⚡ Creating human-readable summary
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Enhanced AI Preview Section */}
-        {showAiPreview && aiPreview && (
-          <View style={styles.previewSection}>
-            <View style={styles.previewHeader}>
-              <View style={styles.previewHeaderLeft}>
-                <Sparkles size={20} color="#7C3AED" strokeWidth={2} />
-                <Text style={styles.previewTitle}>AI Analysis Complete</Text>
-                <Star size={16} color="#F59E0B" strokeWidth={2} />
-              </View>
-              <TouchableOpacity
-                onPress={handleDiscardPreview}
-                style={styles.discardButton}
-              >
-                <X size={16} color="#6B7280" strokeWidth={2} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.previewContent}>
-              <View style={styles.previewField}>
-                <Text style={styles.previewFieldLabel}>Generated Title</Text>
-                <TextInput
-                  style={styles.previewInput}
-                  value={customTitle}
-                  onChangeText={setCustomTitle}
-                  placeholder="Edit title..."
-                  placeholderTextColor="#9CA3AF"
-                />
-              </View>
-
-              <View style={styles.previewField}>
-                <Text style={styles.previewFieldLabel}>Generated Summary</Text>
-                <TextInput
-                  style={[styles.previewInput, styles.previewTextArea]}
-                  value={customSummary}
-                  onChangeText={setCustomSummary}
-                  placeholder="Edit summary..."
-                  placeholderTextColor="#9CA3AF"
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
-              </View>
-
-              {aiPreview.tags && aiPreview.tags.length > 0 && (
-                <View style={styles.previewField}>
-                  <Text style={styles.previewFieldLabel}>Generated Tags</Text>
-                  <View style={styles.tagsContainer}>
-                    {aiPreview.tags.map((tag, index) => (
-                      <View key={index} style={styles.tag}>
-                        <Text style={styles.tagText}>{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.aiQualityIndicator}>
-              <Brain size={16} color="#059669" strokeWidth={2} />
-              <Text style={styles.aiQualityText}>
-                AI-powered content analysis complete
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Enhanced Create Note Button */}
-        <TouchableOpacity
-          style={[
-            styles.createButton,
-            !canCreate && styles.createButtonDisabled,
-          ]}
-          onPress={handleCreateNote}
-          disabled={!canCreate}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}
+      >
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
         >
-          {loading || analyzing ? (
-            <View style={styles.createContainer}>
-              <ActivityIndicator color="#ffffff" size="small" />
-              <Text style={styles.createButtonText}>
-                {analyzing ? 'Analyzing...' : 'Creating Note...'}
-              </Text>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.title}>Create Note</Text>
+            <View style={styles.aiChip}>
+              <Brain size={16} color={theme.colors.primary[600]} strokeWidth={1.5} />
+              <Text style={styles.aiChipText}>AI-Powered</Text>
             </View>
-          ) : (
-            <View style={styles.createContainer}>
-              <Check size={20} color="#ffffff" strokeWidth={2} />
-              <Text style={styles.createButtonText}>
-                {aiPreview ? 'Create Note' : 'Analyze & Create Note'}
-              </Text>
-              {aiPreview && (
-                <Sparkles size={16} color="#ffffff" strokeWidth={2} />
-              )}
+          </View>
+
+          {/* Content Input */}
+          <View style={styles.inputSection}>
+            {selectedFile && (
+              <View style={styles.filePreview}>
+                {activeTab === 'image' ? (
+                  <Image source={{ uri: selectedFile.uri }} style={styles.imagePreview} />
+                ) : (
+                  <View style={styles.fileIconContainer}>
+                    <FileText size={32} color={theme.colors.text.tertiary} strokeWidth={1} />
+                  </View>
+                )}
+                <View style={styles.fileInfo}>
+                  <Text style={styles.fileName} numberOfLines={1}>
+                    {selectedFile.name}
+                  </Text>
+                  {selectedFile.size && (
+                    <Text style={styles.fileSize}>
+                      {formatFileSize(selectedFile.size)}
+                    </Text>
+                  )}
+                  {/* Upload Status */}
+                  {uploadedFileUrl ? (
+                    <View style={styles.uploadStatus}>
+                      <Cloud size={14} color={theme.colors.success.main} strokeWidth={1.5} />
+                      <Text style={styles.uploadedText}>Uploaded</Text>
+                    </View>
+                  ) : uploading ? (
+                    <View style={styles.uploadStatus}>
+                      <ActivityIndicator size="small" color={theme.colors.primary[600]} />
+                      <Text style={styles.uploadingText}>Uploading...</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.uploadStatus}>
+                      <CloudUpload size={14} color={theme.colors.text.tertiary} strokeWidth={1.5} />
+                      <Text style={styles.pendingText}>Ready to upload</Text>
+                    </View>
+                  )}
+                </View>
+                <TouchableOpacity
+                  style={styles.removeFileButton}
+                  onPress={() => {
+                    setSelectedFile(null);
+                    setUploadedFileUrl(null);
+                    setActiveTab('text');
+                  }}
+                >
+                  <X size={16} color={theme.colors.text.secondary} strokeWidth={2} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.textInputContainer}>
+              <TextInput
+                style={styles.textInput}
+                value={content}
+                onChangeText={handleContentChange}
+                placeholder={
+                  selectedFile
+                    ? 'Add notes about this file (optional)...'
+                    : activeTab === 'url'
+                    ? 'Paste a URL here...'
+                    : 'Write your note here...'
+                }
+                placeholderTextColor={theme.colors.text.tertiary}
+                multiline
+                textAlignVertical="top"
+                keyboardType={activeTab === 'url' ? 'url' : 'default'}
+                autoCapitalize={activeTab === 'url' ? 'none' : 'sentences'}
+              />
+              
+              {/* Input Actions */}
+              <View style={styles.inputActions}>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={handleDocumentPicker}
+                  activeOpacity={0.7}
+                  disabled={uploading}
+                >
+                  <Upload size={20} color={uploading ? theme.colors.text.disabled : theme.colors.text.secondary} strokeWidth={1.5} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={handleImagePicker}
+                  activeOpacity={0.7}
+                  disabled={uploading}
+                >
+                  <ImageIcon size={20} color={uploading ? theme.colors.text.disabled : theme.colors.text.secondary} strokeWidth={1.5} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={handleCameraPicker}
+                  activeOpacity={0.7}
+                  disabled={uploading}
+                >
+                  <Camera size={20} color={uploading ? theme.colors.text.disabled : theme.colors.text.secondary} strokeWidth={1.5} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* AI Preview */}
+          {showAiPreview && aiPreview && (
+            <View style={styles.aiPreview}>
+              <View style={styles.aiPreviewHeader}>
+                <View style={styles.aiPreviewTitle}>
+                  <Sparkles size={20} color={theme.colors.primary[600]} strokeWidth={1.5} />
+                  <Text style={styles.aiPreviewTitleText}>AI Analysis</Text>
+                </View>
+                <TouchableOpacity onPress={handleDiscardPreview}>
+                  <X size={20} color={theme.colors.text.tertiary} strokeWidth={1.5} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.aiPreviewContent}>
+                <View style={styles.aiField}>
+                  <Text style={styles.aiFieldLabel}>Title</Text>
+                  <TextInput
+                    style={styles.aiFieldInput}
+                    value={customTitle}
+                    onChangeText={setCustomTitle}
+                    placeholder="Edit title..."
+                    placeholderTextColor={theme.colors.text.tertiary}
+                  />
+                </View>
+
+                <View style={styles.aiField}>
+                  <Text style={styles.aiFieldLabel}>Summary</Text>
+                  <TextInput
+                    style={[styles.aiFieldInput, styles.aiFieldTextArea]}
+                    value={customSummary}
+                    onChangeText={setCustomSummary}
+                    placeholder="Edit summary..."
+                    placeholderTextColor={theme.colors.text.tertiary}
+                    multiline
+                    numberOfLines={3}
+                  />
+                </View>
+
+                {aiPreview.tags && aiPreview.tags.length > 0 && (
+                  <View style={styles.aiField}>
+                    <Text style={styles.aiFieldLabel}>Tags</Text>
+                    <View style={styles.tagsContainer}>
+                      {aiPreview.tags.map((tag, index) => (
+                        <View key={index} style={styles.tag}>
+                          <Text style={styles.tagText}>{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
             </View>
           )}
-        </TouchableOpacity>
 
-        {(content || selectedFile) && (
-          <TouchableOpacity style={styles.clearButton} onPress={handleClearAll}>
-            <Text style={styles.clearButtonText}>Clear All</Text>
-          </TouchableOpacity>
-        )}
-      </ScrollView>
+          {/* Action Buttons */}
+          <View style={styles.actions}>
+            {!aiPreview && canAnalyze && (
+              <TouchableOpacity
+                style={styles.analyzeButton}
+                onPress={handleAnalyzeContent}
+                disabled={!canAnalyze}
+                activeOpacity={0.8}
+              >
+                <Brain size={20} color={theme.colors.primary[600]} strokeWidth={1.5} />
+                <Text style={styles.analyzeButtonText}>Analyze with AI</Text>
+              </TouchableOpacity>
+            )}
 
-      {/* Sweet Alert Modal */}
+            <TouchableOpacity
+              style={[styles.createButton, !canCreate && styles.createButtonDisabled]}
+              onPress={handleCreateNote}
+              disabled={!canCreate}
+              activeOpacity={0.8}
+            >
+              {loading || analyzing || uploading ? (
+                <>
+                  <ActivityIndicator color={theme.colors.text.inverse} size="small" />
+                  <Text style={styles.createButtonText}>
+                    {uploading ? 'Uploading...' : analyzing ? 'Analyzing...' : 'Creating...'}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Check size={20} color={theme.colors.text.inverse} strokeWidth={2} />
+                  <Text style={styles.createButtonText}>
+                    {aiPreview ? 'Create Note' : 'Create & Analyze'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            {(content || selectedFile) && (
+              <TouchableOpacity 
+                style={styles.clearButton} 
+                onPress={handleClearAll}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.clearButtonText}>Clear All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Success Modal */}
       <Modal
         transparent={true}
         visible={showSuccessModal}
@@ -724,21 +761,9 @@ export default function CreateScreen() {
               },
             ]}
           >
-            <View style={styles.modalContent}>
-              <View style={styles.successIconContainer}>
-                <CheckCircle size={60} color="#059669" strokeWidth={2} />
-              </View>
-              <Text style={styles.modalTitle}>Success!</Text>
-              <Text style={styles.modalMessage}>
-                Note created successfully with AI-powered organization!
-              </Text>
-              <View style={styles.modalFooter}>
-                <Sparkles size={20} color="#7C3AED" strokeWidth={2} />
-                <Text style={styles.modalFooterText}>
-                  Redirecting to home...
-                </Text>
-              </View>
-            </View>
+            <CheckCircle size={60} color={theme.colors.success.main} strokeWidth={1.5} />
+            <Text style={styles.modalTitle}>Success!</Text>
+            <Text style={styles.modalMessage}>Note created successfully</Text>
           </Animated.View>
         </View>
       </Modal>
@@ -749,403 +774,266 @@ export default function CreateScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.background.secondary,
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
   header: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.md,
   },
   title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+    fontSize: theme.typography.fontSize['2xl'],
+    fontFamily: theme.typography.fontFamily.bold,
+    color: theme.colors.text.primary,
   },
-  aiIndicator: {
+  aiChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3E8FF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 6,
+    backgroundColor: theme.colors.primary[50],
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.full,
+    gap: theme.spacing.xs,
   },
-  aiIndicatorText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#7C3AED',
-  },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  inputContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    overflow: 'hidden',
+  aiChipText: {
+    fontSize: theme.typography.fontSize.xs,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.primary[600],
   },
   inputSection: {
-    marginBottom: 24,
+    paddingHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
   },
-  inputLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 12,
-  },
-  textInput: {
-    padding: 16,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    minHeight: 200,
-    flex: 1,
-  },
-  inputActions: {
+  filePreview: {
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: '#F9FAFB',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    gap: 8,
-  },
-  actionButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  actionButtonActive: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#2563EB',
-  },
-  imagePreviewContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
-    marginBottom: 16,
-    position: 'relative',
+    ...theme.shadows.sm,
   },
   imagePreview: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-    resizeMode: 'cover',
+    width: 60,
+    height: 60,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.neutral[100],
   },
-  filePreviewContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    padding: 16,
-    marginBottom: 16,
-    flexDirection: 'row',
+  fileIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.neutral[50],
     alignItems: 'center',
-    position: 'relative',
+    justifyContent: 'center',
   },
   fileInfo: {
     flex: 1,
-    marginLeft: 12,
-    marginTop: 8,
+    marginLeft: theme.spacing.md,
   },
   fileName: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 4,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xs,
   },
   fileSize: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 2,
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.xs,
   },
-  fileType: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+  uploadStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+  },
+  uploadedText: {
+    fontSize: theme.typography.fontSize.xs,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.success.main,
+  },
+  uploadingText: {
+    fontSize: theme.typography.fontSize.xs,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.primary[600],
+  },
+  pendingText: {
+    fontSize: theme.typography.fontSize.xs,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.tertiary,
   },
   removeFileButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    padding: theme.spacing.sm,
   },
-  analyzeButton: {
-    backgroundColor: '#7C3AED',
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginBottom: 24,
-    shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  textInputContainer: {
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: theme.borderRadius.lg,
+    ...theme.shadows.sm,
   },
-  analyzeButtonDisabled: {
-    opacity: 0.6,
-    shadowOpacity: 0,
-    elevation: 0,
+  textInput: {
+    padding: theme.spacing.md,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.primary,
+    minHeight: 160,
   },
-  analyzingContainer: {
+  inputActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.neutral[100],
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+    gap: theme.spacing.xs,
   },
-  analyzeContainer: {
+  actionButton: {
+    padding: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+  },
+  aiPreview: {
+    marginHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    ...theme.shadows.sm,
+  },
+  aiPreviewHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  analyzeButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#ffffff',
-  },
-  loadingSection: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    gap: 12,
-    marginBottom: 24,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  loadingText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#7C3AED',
-  },
-  loadingSubtext: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  loadingSteps: {
-    marginTop: 16,
-    gap: 8,
-  },
-  loadingStep: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#059669',
-    textAlign: 'center',
-  },
-  previewSection: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  previewHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
   },
-  previewHeaderLeft: {
+  aiPreviewTitle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: theme.spacing.sm,
   },
-  previewTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+  aiPreviewTitleText: {
+    fontSize: theme.typography.fontSize.lg,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.primary,
   },
-  discardButton: {
-    padding: 4,
+  aiPreviewContent: {
+    gap: theme.spacing.md,
   },
-  previewContent: {
-    gap: 16,
+  aiField: {
+    gap: theme.spacing.sm,
   },
-  previewField: {
-    gap: 8,
+  aiFieldLabel: {
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.text.secondary,
   },
-  previewFieldLabel: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
+  aiFieldInput: {
+    backgroundColor: theme.colors.neutral[50],
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.primary,
   },
-  previewInput: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  previewTextArea: {
+  aiFieldTextArea: {
     minHeight: 80,
     textAlignVertical: 'top',
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: theme.spacing.sm,
   },
   tag: {
-    backgroundColor: '#F3E8FF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E9D5FF',
+    backgroundColor: theme.colors.primary[50],
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.full,
   },
   tagText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#7C3AED',
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.primary[600],
   },
-  aiQualityIndicator: {
+  actions: {
+    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
+  analyzeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    backgroundColor: theme.colors.background.primary,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    gap: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.primary[200],
   },
-  aiQualityText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#059669',
+  analyzeButtonText: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.primary[600],
   },
   createButton: {
-    backgroundColor: '#059669',
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primary[600],
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    gap: theme.spacing.sm,
+    ...theme.shadows.md,
   },
   createButtonDisabled: {
     opacity: 0.6,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  createContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
   },
   createButtonText: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#ffffff',
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.inverse,
   },
   clearButton: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: theme.spacing.md,
   },
   clearButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.text.tertiary,
   },
-  // Sweet Alert Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   modalContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 0,
-    maxWidth: 320,
-    width: '100%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  modalContent: {
-    padding: 30,
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: theme.borderRadius.xl,
+    padding: theme.spacing.xl,
     alignItems: 'center',
-  },
-  successIconContainer: {
-    marginBottom: 20,
-    backgroundColor: '#F0FDF4',
-    borderRadius: 50,
-    padding: 15,
+    gap: theme.spacing.md,
+    ...theme.shadows.xl,
   },
   modalTitle: {
-    fontSize: 24,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 12,
-    textAlign: 'center',
+    fontSize: theme.typography.fontSize['2xl'],
+    fontFamily: theme.typography.fontFamily.bold,
+    color: theme.colors.text.primary,
   },
   modalMessage: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 20,
-  },
-  modalFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#F9FAFB',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  modalFooterText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#7C3AED',
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.secondary,
   },
 });
