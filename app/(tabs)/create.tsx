@@ -20,6 +20,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { useNotesStore } from '@/lib/store';
+import { useGuestMode } from '@/lib/guestContext';
 import { summarizeContent, fetchUrlContent } from '@/lib/ai';
 import { uploadImage, uploadDocument, validateFile, formatFileSize } from '@/lib/storage';
 import {
@@ -36,6 +37,7 @@ import {
   CloudUpload,
 } from 'lucide-react-native';
 import { theme } from '@/lib/theme';
+import { SignUpPopup } from '@/components/SignUpPopup';
 
 type NoteType = 'text' | 'url' | 'file' | 'image';
 
@@ -75,9 +77,11 @@ export default function CreateScreen() {
   const [selectedFile, setSelectedFile] = useState<FileInfo | null>(null);
   const [uploadedFileUrl, setUploadedFileUrl] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showSignUpPopup, setShowSignUpPopup] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
   const [scaleAnim] = useState(new Animated.Value(0.8));
-  const { createNote } = useNotesStore();
+  const { createNote, isGuestMode } = useNotesStore();
+  const { guestUsage } = useGuestMode();
 
   function showSweetAlert() {
     setShowSuccessModal(true);
@@ -280,7 +284,6 @@ export default function CreateScreen() {
       setShowAiPreview(true);
     } catch (error) {
       Alert.alert('Error', 'Failed to analyze content. Please try again.');
-      console.error('Analysis error:', error);
     } finally {
       setAnalyzing(false);
     }
@@ -292,11 +295,19 @@ export default function CreateScreen() {
       return;
     }
 
+    // Check guest mode limits
+    if (isGuestMode && guestUsage.notes >= guestUsage.maxNotes) {
+      setShowSignUpPopup(true);
+      return;
+    }
+
     setLoading(true);
     try {
       let finalContent = content;
+      let noteTitle = customTitle || '';
+      let noteSummary = customSummary || '';
+      let noteTags: string[] = [];
       let fileUrl = uploadedFileUrl;
-      let aiResult = aiPreview;
 
       // Handle file upload if not already uploaded
       if (selectedFile && !uploadedFileUrl) {
@@ -308,68 +319,15 @@ export default function CreateScreen() {
         setUploadedFileUrl(fileUrl);
       }
 
-      // If no AI preview exists, analyze first
-      if (!aiResult) {
-        setAnalyzing(true);
-        try {
-          // Handle different content types for analysis
-          if (activeTab === 'url' && content.trim()) {
-            try {
-              finalContent = await fetchUrlContent(content);
-            } catch (error) {
-              console.error('URL fetch error in create:', error);
-              Alert.alert(
-                'Error',
-                'Could not fetch URL content. Please check the URL and try again.'
-              );
-              setAnalyzing(false);
-              setLoading(false);
-              return;
-            }
-          } else if (
-            (activeTab === 'file' || activeTab === 'image') &&
-            selectedFile
-          ) {
-            finalContent = await extractFileContent(
-              selectedFile.uri,
-              selectedFile.name,
-              fileUrl || undefined
-            );
-          } else if (!content.trim()) {
-            Alert.alert('Error', 'Please enter some content to analyze');
-            setAnalyzing(false);
-            setLoading(false);
-            return;
-          }
-
-          // Get AI analysis
-          aiResult = await summarizeContent(finalContent, activeTab, fileUrl || undefined);
-          setAiPreview(aiResult);
-          setCustomTitle(aiResult.title);
-          setCustomSummary(aiResult.summary);
-          setShowAiPreview(true);
-        } catch (error) {
-          Alert.alert('Error', 'Failed to analyze content. Please try again.');
-          console.error('Analysis error:', error);
-          setAnalyzing(false);
-          setLoading(false);
-          return;
-        } finally {
-          setAnalyzing(false);
-        }
-      }
-
-      // Now handle content preparation for note creation
-      if (
-        activeTab === 'url' &&
-        content.trim() &&
-        !finalContent.includes('Content:')
-      ) {
+      // Handle different content types
+      if (activeTab === 'url' && content.trim()) {
         try {
           finalContent = await fetchUrlContent(content);
         } catch (error) {
-          console.error('URL content fetch error:', error);
-          Alert.alert('Error', 'Could not fetch URL content');
+          Alert.alert(
+            'Error',
+            'Could not fetch URL content. Please check the URL and try again.'
+          );
           setLoading(false);
           return;
         }
@@ -377,37 +335,56 @@ export default function CreateScreen() {
         (activeTab === 'file' || activeTab === 'image') &&
         selectedFile
       ) {
-        if (!finalContent.includes('File:')) {
-          finalContent = await extractFileContent(
-            selectedFile.uri,
-            selectedFile.name,
-            fileUrl || undefined
-          );
+        finalContent = await extractFileContent(
+          selectedFile.uri,
+          selectedFile.name,
+          fileUrl || undefined
+        );
+      }
+
+      // Use AI preview if available, otherwise analyze content
+      if (aiPreview) {
+        noteTitle = aiPreview.title;
+        noteSummary = aiPreview.summary;
+        noteTags = aiPreview.tags;
+      } else {
+        try {
+          const result = await summarizeContent(finalContent, activeTab, fileUrl || undefined);
+          noteTitle = result.title;
+          noteSummary = result.summary;
+          noteTags = result.tags;
+        } catch (error) {
+          console.error('Failed to analyze content:', error);
+          // Use fallback values
+          noteTitle = content.substring(0, 50) + (content.length > 50 ? '...' : '');
+          noteSummary = content.substring(0, 200) + (content.length > 200 ? '...' : '');
         }
       }
 
       // Create note with AI-generated or custom data
       const noteData = {
-        title: customTitle || aiResult.title,
+        title: noteTitle,
         original_content: finalContent,
-        summary: customSummary || aiResult.summary,
+        summary: noteSummary,
         type: activeTab,
-        tags: aiResult.tags,
-        source_url: extractFirstUrl(finalContent),
+        tags: noteTags,
+        source_url: activeTab === 'url' ? content : extractFirstUrl(finalContent),
         file_url: fileUrl, // Use the uploaded file URL
       };
 
       const newNote = await createNote(noteData);
-
+      
       if (newNote) {
-        handleClearAll();
         showSweetAlert();
       } else {
-        Alert.alert('Error', 'Failed to create note');
+        Alert.alert('Error', 'Failed to create note. Please try again.');
       }
     } catch (error) {
-      Alert.alert('Error', 'An unexpected error occurred');
-      console.error('Create note error:', error);
+      if (error instanceof Error && error.message === 'GUEST_LIMIT_REACHED') {
+        setShowSignUpPopup(true);
+      } else {
+        Alert.alert('Error', 'Failed to create note. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -696,18 +673,6 @@ export default function CreateScreen() {
 
           {/* Action Buttons */}
           <View style={styles.actions}>
-            {!aiPreview && canAnalyze && (
-              <TouchableOpacity
-                style={styles.analyzeButton}
-                onPress={handleAnalyzeContent}
-                disabled={!canAnalyze}
-                activeOpacity={0.8}
-              >
-                <Brain size={20} color={theme.colors.primary[600]} strokeWidth={1.5} />
-                <Text style={styles.analyzeButtonText}>Analyze with AI</Text>
-              </TouchableOpacity>
-            )}
-
             <TouchableOpacity
               style={[styles.createButton, !canCreate && styles.createButtonDisabled]}
               onPress={handleCreateNote}
@@ -767,6 +732,20 @@ export default function CreateScreen() {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Sign Up Popup */}
+      <SignUpPopup
+        visible={showSignUpPopup}
+        onClose={() => setShowSignUpPopup(false)}
+        onSignUp={() => {
+          setShowSignUpPopup(false);
+          router.push('/auth/signup');
+        }}
+        onSignIn={() => {
+          setShowSignUpPopup(false);
+          router.push('/auth/login');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -968,22 +947,6 @@ const styles = StyleSheet.create({
   actions: {
     paddingHorizontal: theme.spacing.lg,
     gap: theme.spacing.md,
-  },
-  analyzeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.background.primary,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
-    gap: theme.spacing.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.primary[200],
-  },
-  analyzeButtonText: {
-    fontSize: theme.typography.fontSize.base,
-    fontFamily: theme.typography.fontFamily.medium,
-    color: theme.colors.primary[600],
   },
   createButton: {
     flexDirection: 'row',

@@ -24,6 +24,7 @@ import { testSupabaseConnection } from '@/lib/supabase';
 import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2, FileText, Link2, Image as ImageIcon, File, BellOff } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { ReminderCard } from '@/components/ReminderCard';
+import { theme } from '@/lib/theme';
 
 type Priority = 'low' | 'medium' | 'high';
 
@@ -432,7 +433,7 @@ export default function RemindersScreen() {
 
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <Text style={styles.title}>Reminders</Text>
+          <Text style={styles.headerTitle}>Reminders</Text>
           <TouchableOpacity 
             style={styles.addButton}
             onPress={() => setShowAddModal(true)}
@@ -441,7 +442,7 @@ export default function RemindersScreen() {
             <Plus size={20} color="#ffffff" strokeWidth={2} />
           </TouchableOpacity>
         </View>
-        <Text style={styles.subtitle}>Never forget important tasks</Text>
+        <Text style={styles.headerSubtitle}>Never forget important tasks</Text>
         
         {!hasPermission && (
           <TouchableOpacity 
@@ -682,10 +683,9 @@ export default function RemindersScreen() {
                     ]}
                     onPress={() => setFormData(prev => ({ ...prev, priority }))}
                   >
-                    <View style={[styles.priorityIndicator, { backgroundColor: priorityColors[priority].text }]} />
                     <Text style={[
                       styles.priorityText,
-                      formData.priority === priority && { color: priorityColors[priority].text }
+                      formData.priority === priority && styles.priorityTextActive
                     ]}>
                       {priority.charAt(0).toUpperCase() + priority.slice(1)}
                     </Text>
@@ -758,7 +758,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: theme.typography.fontFamily.regular,
     color: '#6B7280',
   },
   header: {
@@ -774,23 +774,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
-  title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
+  headerTitle: {
+    fontSize: theme.typography.fontSize['2xl'],
+    fontFamily: theme.typography.fontFamily.bold,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xs,
   },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    marginBottom: 12,
+  headerSubtitle: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.secondary,
   },
   addButton: {
-    backgroundColor: '#2563EB',
-    borderRadius: 12,
-    padding: 12,
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.primary[600],
     alignItems: 'center',
     justifyContent: 'center',
+    ...theme.shadows.sm,
   },
   permissionBanner: {
     flexDirection: 'row',
@@ -802,7 +804,7 @@ const styles = StyleSheet.create({
   },
   permissionText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: theme.typography.fontFamily.medium,
     color: '#DC2626',
     flex: 1,
   },
@@ -821,28 +823,34 @@ const styles = StyleSheet.create({
   },
   testButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: theme.typography.fontFamily.semiBold,
     color: '#FFFFFF',
   },
   content: {
     flex: 1,
   },
   section: {
-    padding: 20,
+    paddingHorizontal: theme.spacing.lg,
+    marginBottom: theme.spacing.xl,
   },
   sectionHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
+    marginBottom: theme.spacing.md,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontSize: theme.typography.fontSize.xl,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.primary,
+  },
+  seeAllText: {
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.primary[600],
   },
   remindersContainer: {
-    gap: 12,
+    gap: theme.spacing.md,
   },
   reminderCard: {
     backgroundColor: '#ffffff',
@@ -874,7 +882,7 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: theme.typography.fontFamily.medium,
     color: '#6B7280',
   },
   overdueText: {
@@ -887,19 +895,19 @@ const styles = StyleSheet.create({
   },
   priorityBadgeText: {
     fontSize: 10,
-    fontFamily: 'Inter-Bold',
+    fontFamily: theme.typography.fontFamily.bold,
     letterSpacing: 0.5,
   },
   reminderTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: theme.typography.fontFamily.semiBold,
     color: '#111827',
     lineHeight: 22,
     marginBottom: 8,
   },
   reminderDescription: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: theme.typography.fontFamily.regular,
     color: '#6B7280',
     lineHeight: 20,
     marginBottom: 12,
@@ -920,20 +928,20 @@ const styles = StyleSheet.create({
   },
   noteLabel: {
     fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: theme.typography.fontFamily.semiBold,
     color: '#64748B',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   noteTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: theme.typography.fontFamily.semiBold,
     color: '#1E293B',
     marginBottom: 4,
   },
   noteSummary: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: theme.typography.fontFamily.regular,
     color: '#64748B',
   },
   reminderFooter: {
@@ -946,7 +954,7 @@ const styles = StyleSheet.create({
   },
   exactTime: {
     fontSize: 12,
-    fontFamily: 'Inter-Regular',
+    fontFamily: theme.typography.fontFamily.regular,
     color: '#9CA3AF',
   },
   reminderActions: {
@@ -969,98 +977,106 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingVertical: theme.spacing['3xl'],
+    gap: theme.spacing.md,
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.neutral[50],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.sm,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginTop: 8,
+    fontSize: theme.typography.fontSize.lg,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.primary,
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.secondary,
     textAlign: 'center',
     maxWidth: 280,
-    lineHeight: 20,
+    lineHeight: theme.typography.fontSize.base * theme.typography.lineHeight.relaxed,
   },
   createButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-    marginTop: 8,
+    backgroundColor: theme.colors.primary[600],
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.full,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+    ...theme.shadows.md,
   },
   createButtonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#ffffff',
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.inverse,
   },
   errorContainer: {
-    backgroundColor: '#FEF2F2',
-    padding: 12,
-    borderRadius: 8,
-    margin: 20,
+    backgroundColor: theme.colors.error.light,
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: theme.spacing.md,
   },
   errorText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#DC2626',
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.error.dark,
     textAlign: 'center',
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: theme.colors.background.secondary,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#ffffff',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    backgroundColor: theme.colors.background.primary,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: theme.colors.neutral[200],
   },
   modalCloseButton: {
-    padding: 8,
+    padding: theme.spacing.sm,
   },
   modalTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontSize: theme.typography.fontSize.lg,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.primary,
   },
   modalSaveButton: {
-    padding: 8,
+    padding: theme.spacing.sm,
   },
   modalContent: {
     flex: 1,
-    padding: 20,
+    padding: theme.spacing.lg,
   },
   inputGroup: {
-    marginBottom: 24,
+    marginBottom: theme.spacing.lg,
   },
   inputLabel: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginBottom: 8,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.sm,
   },
   textInput: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.primary,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.neutral[200],
   },
   textArea: {
     minHeight: 80,
@@ -1068,53 +1084,88 @@ const styles = StyleSheet.create({
   },
   dateTimeContainer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: theme.spacing.md,
   },
   dateTimeButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.neutral[200],
   },
   dateTimeText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#111827',
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.text.primary,
   },
   priorityContainer: {
-    gap: 12,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
   },
   priorityButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colors.background.primary,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: theme.colors.neutral[200],
+    alignItems: 'center',
   },
   priorityButtonActive: {
-    borderWidth: 2,
-  },
-  priorityIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    borderColor: theme.colors.primary[600],
+    backgroundColor: theme.colors.primary[50],
   },
   priorityText: {
-    fontSize: 16,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-    flex: 1,
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.text.secondary,
+  },
+  priorityTextActive: {
+    color: theme.colors.primary[600],
   },
   previewSection: {
-    marginTop: 8,
+    marginTop: theme.spacing.sm,
+  },
+  notificationPreview: {
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.neutral[200],
+    ...theme.shadows.sm,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  notificationAppName: {
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.primary[600],
+  },
+  notificationTitle: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xs,
+  },
+  notificationBody: {
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.sm,
+  },
+  notificationTime: {
+    fontSize: theme.typography.fontSize.xs,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.tertiary,
   },
   previewCard: {
     backgroundColor: '#ffffff',
@@ -1125,19 +1176,19 @@ const styles = StyleSheet.create({
   },
   previewTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: theme.typography.fontFamily.semiBold,
     color: '#111827',
     marginBottom: 8,
   },
   previewTime: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: theme.typography.fontFamily.medium,
     color: '#6B7280',
     marginBottom: 8,
   },
   previewDescription: {
     fontSize: 14,
-    fontFamily: 'Inter-Regular',
+    fontFamily: theme.typography.fontFamily.regular,
     color: '#6B7280',
     marginBottom: 12,
   },
@@ -1149,7 +1200,7 @@ const styles = StyleSheet.create({
   },
   previewPriorityText: {
     fontSize: 10,
-    fontFamily: 'Inter-Bold',
+    fontFamily: theme.typography.fontFamily.bold,
     letterSpacing: 0.5,
   },
 });

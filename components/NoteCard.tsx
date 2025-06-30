@@ -21,11 +21,15 @@ import {
 import { Database } from '@/lib/supabase';
 import { useReminderStore } from '@/lib/reminderStore';
 import { theme } from '@/lib/theme';
+import { GuestNote } from '@/lib/guestMode';
 
-type Note = Database['public']['Tables']['notes']['Row'];
+type DatabaseNote = Database['public']['Tables']['notes']['Row'];
+
+// Unified note type that can handle both database and guest notes
+type UnifiedNote = DatabaseNote | GuestNote;
 
 interface NoteCardProps {
-  note: Note;
+  note: UnifiedNote;
 }
 
 // Optimize with React.memo and custom comparison
@@ -39,6 +43,11 @@ export const NoteCard = React.memo(({ note }: NoteCardProps) => {
   const nextReminder = noteReminders.sort((a, b) => 
     new Date(a.remind_at).getTime() - new Date(b.remind_at).getTime()
   )[0];
+
+  // Helper function to check if note is a guest note
+  const isGuestNote = (note: UnifiedNote): note is GuestNote => {
+    return 'is_guest' in note && note.is_guest === true;
+  };
 
   const getTypeIcon = () => {
     const iconProps = { size: 16, strokeWidth: 1.5 };
@@ -99,12 +108,13 @@ export const NoteCard = React.memo(({ note }: NoteCardProps) => {
   const handleOpenSourceLink = async (e: any) => {
     e.stopPropagation();
 
-    if (!displaySourceUrl) return;
+    const sourceUrl = note.source_url;
+    if (!sourceUrl) return;
 
     try {
-      const supported = await Linking.canOpenURL(displaySourceUrl);
+      const supported = await Linking.canOpenURL(sourceUrl);
       if (supported) {
-        await Linking.openURL(displaySourceUrl);
+        await Linking.openURL(sourceUrl);
       } else {
         Alert.alert('Error', 'Cannot open this URL');
       }
@@ -266,6 +276,7 @@ const styles = StyleSheet.create({
   },
   headerInfo: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
@@ -343,5 +354,4 @@ const styles = StyleSheet.create({
     color: theme.colors.primary[600],
     flex: 1,
   },
-  // Removed all other unused styles for cleaner code
 });

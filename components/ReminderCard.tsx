@@ -17,7 +17,9 @@ import {
   Image as ImageIcon,
   File,
   BellOff,
+  Edit3,
 } from 'lucide-react-native';
+import { theme } from '@/lib/theme';
 
 interface ReminderCardProps {
   reminder: any;
@@ -201,26 +203,28 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   reminderTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
+    fontSize: theme.typography.fontSize.lg,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xs,
   },
   reminderDescription: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 20,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.secondary,
+    marginBottom: theme.spacing.md,
+    lineHeight: theme.typography.fontSize.base * theme.typography.lineHeight.relaxed,
   },
   reminderMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 4,
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.md,
   },
   reminderTime: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.text.tertiary,
   },
   overdueText: {
     color: '#DC2626',
@@ -232,9 +236,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
   linkedNoteText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.text.tertiary,
     flex: 1,
   },
   reminderActions: {
@@ -244,13 +248,30 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-    paddingVertical: 12,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRightWidth: 1,
-    borderRightColor: '#F3F4F6',
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+    gap: theme.spacing.xs,
   },
   completeButton: {
-    backgroundColor: '#F0FDF4',
+    backgroundColor: theme.colors.primary[50],
+  },
+  editButton: {
+    backgroundColor: theme.colors.primary[50],
+  },
+  deleteButton: {
+    backgroundColor: theme.colors.error.light,
+  },
+  actionText: {
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.medium,
+  },
+  editText: {
+    color: theme.colors.primary[600],
+  },
+  deleteText: {
+    color: theme.colors.error.dark,
   },
 }); 
