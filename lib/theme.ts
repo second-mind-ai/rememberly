@@ -70,15 +70,17 @@ export const theme = {
   },
   
   typography: {
-    // Font families
+    // Modern font families - Poppins primary, Inter fallback
     fontFamily: {
-      regular: 'Inter-Regular',
-      medium: 'Inter-Medium',
-      semiBold: 'Inter-SemiBold',
-      bold: 'Inter-Bold',
+      regular: 'Poppins-Regular',
+      medium: 'Poppins-Medium',
+      semiBold: 'Poppins-SemiBold',
+      bold: 'Poppins-Bold',
+      light: 'Poppins-Light',
+      extraBold: 'Poppins-ExtraBold',
     },
     
-    // Font sizes
+    // Modern font sizes with better hierarchy
     fontSize: {
       xs: 12,
       sm: 14,
@@ -88,13 +90,23 @@ export const theme = {
       '2xl': 24,
       '3xl': 30,
       '4xl': 36,
+      '5xl': 48,
     },
     
-    // Line heights
+    // Improved line heights for better readability
     lineHeight: {
       tight: 1.2,
       base: 1.5,
       relaxed: 1.7,
+      loose: 1.8,
+    },
+    
+    // Modern letter spacing
+    letterSpacing: {
+      tight: -0.5,
+      normal: 0,
+      wide: 0.5,
+      wider: 1,
     },
   },
   

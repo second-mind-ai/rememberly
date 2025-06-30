@@ -1,8 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Tabs } from 'expo-router';
-import { Home, Search, Plus, Bell, Grid2x2 } from 'lucide-react-native';
+import { Chrome as Home, Search, Plus, FolderOpen, Grid2x2 } from 'lucide-react-native';
 import { theme } from '@/lib/theme';
+import { useNotesStore } from '@/lib/store';
+import { useGuestMode } from '@/lib/guestContext';
 
 type TabIconProps = {
   name: any;
@@ -29,6 +31,9 @@ function TabIcon({ name: Icon, color, focused, label }: TabIconProps) {
 }
 
 export default function TabLayout() {
+  const { isGuestMode } = useNotesStore();
+  const { guestUsage } = useGuestMode();
+
   return (
     <Tabs
       screenOptions={{
@@ -68,15 +73,8 @@ export default function TabLayout() {
               <Plus size={22} color={theme.colors.text.inverse} strokeWidth={2} />
             </View>
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="reminders"
-        options={{
-          title: 'Reminders',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={Bell} color={color} focused={focused} label="Reminders" />
-          ),
+          tabBarAccessibilityLabel: 'Create New Note Tab',
+          tabBarBadge: isGuestMode && guestUsage.notes >= guestUsage.maxNotes ? '!' : undefined,
         }}
       />
       <Tabs.Screen
@@ -84,8 +82,19 @@ export default function TabLayout() {
         options={{
           title: 'Categories',
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name={Grid2x2} color={color} focused={focused} label="Categories" />
+            <TabIcon name={FolderOpen} color={color} focused={focused} label="Categories" />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="reminders"
+        options={{
+          title: 'Reminders',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name={Grid2x2} color={color} focused={focused} label="Reminders" />
+          ),
+          tabBarAccessibilityLabel: 'Reminders Tab',
+          tabBarBadge: isGuestMode && guestUsage.reminders >= guestUsage.maxReminders ? '!' : undefined,
         }}
       />
     </Tabs>

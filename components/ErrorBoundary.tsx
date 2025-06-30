@@ -1,6 +1,7 @@
 import React, { Component, ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { AlertCircle, RefreshCw } from 'lucide-react-native';
+import { theme } from '@/lib/theme';
 
 interface Props {
   children: ReactNode;
@@ -41,13 +42,13 @@ export class ErrorBoundary extends Component<Props, State> {
         <View style={styles.container}>
           <View style={styles.content}>
             <AlertCircle size={48} color="#DC2626" strokeWidth={2} />
-            <Text style={styles.title}>Something went wrong</Text>
-            <Text style={styles.message}>
+            <Text style={styles.errorTitle}>Something went wrong</Text>
+            <Text style={styles.errorMessage}>
               {this.state.error?.message || 'An unexpected error occurred'}
             </Text>
-            <TouchableOpacity style={styles.button} onPress={this.handleReset}>
+            <TouchableOpacity style={styles.retryButton} onPress={this.handleReset}>
               <RefreshCw size={20} color="#ffffff" strokeWidth={2} />
-              <Text style={styles.buttonText}>Try Again</Text>
+              <Text style={styles.retryButtonText}>Try Again</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -70,33 +71,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
-  title: {
+  errorTitle: {
     fontSize: 20,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    marginTop: 8,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.error.dark,
+    marginBottom: 8,
   },
-  message: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+  errorMessage: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.secondary,
+    marginBottom: 16,
     textAlign: 'center',
-    maxWidth: 300,
-    lineHeight: 20,
   },
-  button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 20,
+  retryButton: {
+    backgroundColor: theme.colors.primary[600],
+    paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-    marginTop: 8,
+    borderRadius: 8,
   },
-  buttonText: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#ffffff',
+  retryButtonText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.inverse,
   },
 }); 

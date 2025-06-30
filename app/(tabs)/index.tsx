@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,64 +6,44 @@ import {
   TouchableOpacity,
   StyleSheet,
   RefreshControl,
-  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-// import { LinearGradient } from 'expo-linear-gradient'; // Commented out as not used
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNotesStore } from '@/lib/store';
+import { useGuestMode } from '@/lib/guestContext';
 import { getCurrentUser, signOut } from '@/lib/auth';
 import { Brain, Plus, FileText, Link2, Image, LogOut } from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
 import { theme } from '@/lib/theme';
+import { GuestBadge } from '@/components/GuestBadge';
+import { SignUpPopup } from '@/components/SignUpPopup';
 
 export default function HomeScreen() {
-  const { notes, loading, fetchNotes, error } = useNotesStore();
+  const { notes, loading, fetchNotes, error, isGuestMode } = useNotesStore();
+  const { guestUsage, loading: guestLoading } = useGuestMode();
   const [user, setUser] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [authChecking, setAuthChecking] = useState(true);
-  const [fadeAnim] = useState(new Animated.Value(0));
+  const [showSignUpPopup, setShowSignUpPopup] = useState(false);
+  const isMounted = useRef(true);
 
   useEffect(() => {
-    let cancelled = false;
-    
-    async function init() {
-      try {
-        // Check auth
-        const { user } = await getCurrentUser();
-        if (cancelled) return;
-        
-        if (!user) {
-          router.replace('/auth/login');
-          return;
-        }
-        
-        setUser(user);
-        setAuthChecking(false);
-        
-        // Animate content in
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: theme.animation.duration.normal,
-          useNativeDriver: true,
-        }).start();
-        
-        // Fetch notes only after auth check
-        await fetchNotes();
-      } catch (error) {
-        console.error('Initialization error:', error);
-        if (!cancelled) {
-          setAuthChecking(false);
-        }
-      }
-    }
-    
-    init();
-    
     return () => {
-      cancelled = true;
+      isMounted.current = false;
     };
-  }, [fadeAnim]);
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+    fetchNotes();
+  }, []);
+
+  async function checkAuth() {
+    const { user } = await getCurrentUser();
+    if (isMounted.current) {
+      setUser(user);
+    }
+  }
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -83,132 +63,188 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Show loading screen while checking auth
-  if (authChecking) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Brain size={48} color={theme.colors.primary[600]} strokeWidth={1.5} />
-          <Text style={styles.loadingText}>Loading...</Text>
-        </View>
-      </SafeAreaView>
-    );
+  function handleGuestBadgePress() {
+    if (guestUsage.notes >= guestUsage.maxNotes) {
+      setShowSignUpPopup(true);
+    }
+  }
+
+  function handleCreateNote() {
+    if (isGuestMode && guestUsage.notes >= guestUsage.maxNotes) {
+      setShowSignUpPopup(true);
+      return;
+    }
+    router.push('/(tabs)/create');
   }
 
   const recentNotes = notes.slice(0, 5);
 
   return (
     <SafeAreaView style={styles.container}>
-      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
-        <ScrollView
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
-              onRefresh={handleRefresh}
-              tintColor={theme.colors.primary[600]}
-            />
-          }
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.greeting}>Welcome back</Text>
-              <Text style={styles.userEmail}>{user?.email}</Text>
-            </View>
-            <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
-              <LogOut size={22} color={theme.colors.text.secondary} strokeWidth={1.5} />
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={handleRefresh}
+            tintColor={theme.colors.primary[600]}
+          />
+        }
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>
+              {isGuestMode ? 'Welcome to Rememberly!' : 'Welcome back!'}
+            </Text>
+            <Text style={styles.userEmail}>
+              {isGuestMode ? 'Guest Mode' : user?.email}
+            </Text>
+          </View>
+          <View style={styles.headerActions}>
+            {isGuestMode && (
+              <GuestBadge
+                notesUsed={guestUsage.notes}
+                maxNotes={guestUsage.maxNotes}
+                onPress={handleGuestBadgePress}
+                showWarning={true}
+              />
+            )}
+            {!isGuestMode && (
+              <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
+                <LogOut size={20} color="#6B7280" strokeWidth={2} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Quick Actions */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick Capture</Text>
+          <View style={styles.quickActions}>
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: '#EFF6FF' }]}
+              onPress={handleCreateNote}
+            >
+              <LinearGradient
+                colors={['#2563EB', '#3B82F6']}
+                style={styles.actionIcon}
+              >
+                <FileText size={24} color="#ffffff" strokeWidth={2} />
+              </LinearGradient>
+              <Text style={styles.actionTitle}>Text Note</Text>
+              <Text style={styles.actionSubtitle}>AI-powered analysis</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: '#F0FDF4' }]}
+              onPress={handleCreateNote}
+            >
+              <LinearGradient
+                colors={['#059669', '#10B981']}
+                style={styles.actionIcon}
+              >
+                <Link2 size={24} color="#ffffff" strokeWidth={2} />
+              </LinearGradient>
+              <Text style={styles.actionTitle}>Save URL</Text>
+              <Text style={styles.actionSubtitle}>Smart summaries</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionCard, { backgroundColor: '#FEF3C7' }]}
+              onPress={handleCreateNote}
+            >
+              <LinearGradient
+                colors={['#D97706', '#F59E0B']}
+                style={styles.actionIcon}
+              >
+                <Image size={24} color="#ffffff" strokeWidth={2} />
+              </LinearGradient>
+              <Text style={styles.actionTitle}>Upload File</Text>
+              <Text style={styles.actionSubtitle}>Auto-organized</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Recent Notes */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Recent Notes</Text>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/explore')}>
+              <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Quick Actions */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Quick Capture</Text>
-            <View style={styles.quickActions}>
-              <TouchableOpacity
-                style={styles.actionCard}
-                onPress={() => router.push('/(tabs)/create')}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.actionIcon, { backgroundColor: theme.colors.primary[50] }]}>
-                  <FileText size={24} color={theme.colors.primary[600]} strokeWidth={1.5} />
-                </View>
-                <Text style={styles.actionTitle}>Text Note</Text>
-                <Text style={styles.actionSubtitle}>Write or paste</Text>
-              </TouchableOpacity>
+          {error && (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          )}
 
+          {loading || guestLoading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading notes...</Text>
+            </View>
+          ) : recentNotes.length > 0 ? (
+            <View style={styles.notesContainer}>
+              {recentNotes.map((note) => (
+                <NoteCard key={note.id} note={note} />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Brain size={48} color="#9CA3AF" strokeWidth={2} />
+              <Text style={styles.emptyTitle}>No notes yet</Text>
+              <Text style={styles.emptySubtitle}>
+                {isGuestMode 
+                  ? 'Create your first note to get started (3 note limit in guest mode)'
+                  : 'Create your first note and let AI organize it perfectly'
+                }
+              </Text>
               <TouchableOpacity
-                style={styles.actionCard}
-                onPress={() => router.push('/(tabs)/create')}
-                activeOpacity={0.8}
+                style={styles.createButton}
+                onPress={handleCreateNote}
               >
-                <View style={[styles.actionIcon, { backgroundColor: theme.colors.success.light }]}>
-                  <Link2 size={24} color={theme.colors.success.dark} strokeWidth={1.5} />
-                </View>
-                <Text style={styles.actionTitle}>Save URL</Text>
-                <Text style={styles.actionSubtitle}>From the web</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.actionCard}
-                onPress={() => router.push('/(tabs)/create')}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.actionIcon, { backgroundColor: theme.colors.warning.light }]}>
-                  <Image size={24} color={theme.colors.warning.dark} strokeWidth={1.5} />
-                </View>
-                <Text style={styles.actionTitle}>Add Media</Text>
-                <Text style={styles.actionSubtitle}>Photo or file</Text>
+                <Plus size={20} color={theme.colors.text.inverse} strokeWidth={2} />
+                <Text style={styles.createButtonText}>Create Note</Text>
               </TouchableOpacity>
             </View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Guest Mode Info */}
+      {isGuestMode && (
+        <View style={styles.guestInfoContainer}>
+          <View style={styles.guestInfo}>
+            <Brain size={20} color="#6B7280" strokeWidth={2} />
+            <Text style={styles.guestInfoText}>
+              You&apos;re in guest mode. Sign up to unlock unlimited notes and features.
+            </Text>
           </View>
+          <TouchableOpacity
+            style={styles.upgradeButton}
+            onPress={() => setShowSignUpPopup(true)}
+          >
+            <Text style={styles.upgradeButtonText}>Upgrade</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-          {/* Recent Notes */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent Notes</Text>
-              {notes.length > 0 && (
-                <TouchableOpacity onPress={() => router.push('/(tabs)/explore')}>
-                  <Text style={styles.seeAllText}>See all</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {error && (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
-
-            {recentNotes.length > 0 ? (
-              <View style={styles.notesContainer}>
-                {recentNotes.map((note) => (
-                  <NoteCard key={note.id} note={note} />
-                ))}
-              </View>
-            ) : (
-              <View style={styles.emptyState}>
-                <View style={styles.emptyIcon}>
-                  <Brain size={48} color={theme.colors.neutral[300]} strokeWidth={1} />
-                </View>
-                <Text style={styles.emptyTitle}>No notes yet</Text>
-                <Text style={styles.emptySubtitle}>
-                  Create your first note and let AI organize it
-                </Text>
-                <TouchableOpacity
-                  style={styles.createButton}
-                  onPress={() => router.push('/(tabs)/create')}
-                  activeOpacity={0.8}
-                >
-                  <Plus size={20} color={theme.colors.text.inverse} strokeWidth={2} />
-                  <Text style={styles.createButtonText}>Create Note</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </ScrollView>
-      </Animated.View>
+      {/* Sign Up Popup */}
+      <SignUpPopup
+        visible={showSignUpPopup}
+        onClose={() => setShowSignUpPopup(false)}
+        onSignUp={() => {
+          setShowSignUpPopup(false);
+          router.push('/auth/signup');
+        }}
+        onSignIn={() => {
+          setShowSignUpPopup(false);
+          router.push('/auth/login');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -371,5 +407,39 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.fontFamily.medium,
     color: theme.colors.error.dark,
     textAlign: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  guestInfoContainer: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  guestInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  guestInfoText: {
+    fontSize: 14,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: '#6B7280',
+  },
+  upgradeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  upgradeButtonText: {
+    fontSize: 14,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: '#ffffff',
   },
 });

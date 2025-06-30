@@ -12,13 +12,16 @@ import { Link, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { signUp } from '@/lib/auth';
+import { useNotesStore } from '@/lib/store';
 import { Brain } from 'lucide-react-native';
+import { theme } from '@/lib/theme';
 
 export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const { isGuestMode } = useNotesStore();
 
   async function handleSignUp() {
     if (!email || !password || !confirmPassword) {
@@ -37,17 +40,32 @@ export default function SignUpScreen() {
     }
 
     setLoading(true);
-    const { error } = await signUp(email, password);
-    setLoading(false);
-
-    if (error) {
-      Alert.alert('Error', error.message);
-    } else {
-      Alert.alert(
-        'Success',
-        'Account created successfully! Please sign in.',
-        [{ text: 'OK', onPress: () => router.replace('/auth/login') }]
-      );
+    try {
+      const { data, error } = await signUp(email, password);
+      
+      if (error) {
+        Alert.alert('Error', error.message);
+      } else {
+        // Success message - migration will happen automatically when user signs in
+        if (isGuestMode) {
+          Alert.alert(
+            'Success',
+            'Account created successfully! Your guest notes will be automatically migrated when you sign in.',
+            [{ text: 'OK' }]
+          );
+        } else {
+          Alert.alert(
+            'Success',
+            'Account created successfully! Please sign in.',
+            [{ text: 'OK' }]
+          );
+        }
+        // AuthGuard will handle redirection automatically
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -64,6 +82,13 @@ export default function SignUpScreen() {
             </View>
             <Text style={styles.title}>Join Rememberly</Text>
             <Text style={styles.subtitle}>Create your account to get started</Text>
+            {isGuestMode && (
+              <View style={styles.guestInfo}>
+                <Text style={styles.guestInfoText}>
+                  Your guest notes will be preserved when you sign up
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.form}>
@@ -161,14 +186,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontFamily: 'Inter-Bold',
+    fontFamily: theme.typography.fontFamily.bold,
     color: '#ffffff',
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: theme.typography.fontFamily.regular,
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
   },
@@ -180,7 +205,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    fontFamily: 'Inter-Medium',
+    fontFamily: theme.typography.fontFamily.medium,
     color: '#ffffff',
   },
   input: {
@@ -189,7 +214,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: theme.typography.fontFamily.regular,
     color: '#1F2937',
   },
   button: {
@@ -205,7 +230,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: theme.typography.fontFamily.semiBold,
     color: '#ffffff',
   },
   footer: {
@@ -216,12 +241,24 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 16,
-    fontFamily: 'Inter-Regular',
+    fontFamily: theme.typography.fontFamily.regular,
     color: 'rgba(255, 255, 255, 0.8)',
   },
   linkText: {
     fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: theme.typography.fontFamily.semiBold,
     color: '#ffffff',
+  },
+  guestInfo: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 24,
+  },
+  guestInfoText: {
+    fontSize: 16,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
   },
 });

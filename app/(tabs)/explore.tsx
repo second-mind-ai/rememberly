@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotesStore } from '@/lib/store';
 import { Search, ListFilter as Filter, ArrowUpDown, Grid2x2 as Grid, List, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { NoteCard } from '@/components/NoteCard';
+import { theme } from '@/lib/theme';
 
 type SortOption = 'newest' | 'oldest' | 'title' | 'type';
 type ViewMode = 'grid' | 'list';
@@ -119,8 +120,8 @@ export default function ExploreScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Notes</Text>
-        <Text style={styles.subtitle}>Browse and search all your notes</Text>
+        <Text style={styles.headerTitle}>Notes</Text>
+        <Text style={styles.headerSubtitle}>Browse and search all your notes</Text>
       </View>
 
       {/* Search Bar */}
@@ -305,16 +306,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  title: {
-    fontSize: 28,
-    fontFamily: 'Inter-Bold',
-    color: '#111827',
-    marginBottom: 4,
+  headerTitle: {
+    fontSize: theme.typography.fontSize['2xl'],
+    fontFamily: theme.typography.fontFamily.bold,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.xs,
   },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+  headerSubtitle: {
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.secondary,
   },
   searchSection: {
     backgroundColor: '#ffffff',
@@ -334,9 +335,9 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
-    fontFamily: 'Inter-Regular',
-    color: '#111827',
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.primary,
   },
   controlsBar: {
     flexDirection: 'row',
@@ -362,7 +363,7 @@ const styles = StyleSheet.create({
   },
   filtersButtonText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: theme.typography.fontFamily.medium,
     color: '#6B7280',
   },
   filtersButtonTextActive: {
@@ -378,7 +379,7 @@ const styles = StyleSheet.create({
   },
   filtersBadgeText: {
     fontSize: 12,
-    fontFamily: 'Inter-Bold',
+    fontFamily: theme.typography.fontFamily.bold,
     color: '#ffffff',
   },
   controlsRight: {
@@ -410,7 +411,7 @@ const styles = StyleSheet.create({
   },
   filterGroupTitle: {
     fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
+    fontFamily: theme.typography.fontFamily.semiBold,
     color: '#374151',
   },
   filterChipsContainer: {
@@ -442,7 +443,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: {
     fontSize: 13,
-    fontFamily: 'Inter-Medium',
+    fontFamily: theme.typography.fontFamily.medium,
     color: '#6B7280',
     textAlign: 'center',
     flexShrink: 1,
@@ -459,7 +460,7 @@ const styles = StyleSheet.create({
   },
   resultsText: {
     fontSize: 14,
-    fontFamily: 'Inter-Medium',
+    fontFamily: theme.typography.fontFamily.medium,
     color: '#6B7280',
   },
   content: {
@@ -482,34 +483,33 @@ const styles = StyleSheet.create({
   },
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 20,
-    gap: 12,
+    paddingVertical: theme.spacing['3xl'],
+    gap: theme.spacing.md,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontFamily: 'Inter-SemiBold',
-    color: '#374151',
-    marginTop: 8,
+    fontSize: theme.typography.fontSize.lg,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.primary,
+    marginTop: theme.spacing.sm,
   },
   emptySubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.secondary,
     textAlign: 'center',
     maxWidth: 280,
-    lineHeight: 20,
+    lineHeight: theme.typography.fontSize.base * theme.typography.lineHeight.relaxed,
   },
   errorContainer: {
-    backgroundColor: '#FEF2F2',
-    padding: 12,
-    borderRadius: 8,
-    margin: 20,
+    backgroundColor: theme.colors.error.light,
+    padding: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    margin: theme.spacing.lg,
   },
   errorText: {
-    fontSize: 14,
-    fontFamily: 'Inter-Medium',
-    color: '#DC2626',
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.error.dark,
     textAlign: 'center',
   },
 });

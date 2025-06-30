@@ -9,10 +9,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  Alert,
 } from 'react-native';
 import { Link, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { signIn } from '@/lib/auth';
+import { useNotesStore } from '@/lib/store';
 import { Brain } from 'lucide-react-native';
 import { theme } from '@/lib/theme';
 
@@ -22,6 +24,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fadeAnim] = useState(new Animated.Value(0));
+  const { isGuestMode } = useNotesStore();
 
   React.useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -40,22 +43,35 @@ export default function LoginScreen() {
     setLoading(true);
     setError(null);
     
-    const { error: signInError } = await signIn(email, password);
-    setLoading(false);
-
-    if (signInError) {
-      // Provide more user-friendly error messages
-      if (signInError.message.includes('Invalid login credentials')) {
-        setError('Invalid email or password');
-      } else if (signInError.message.includes('Email not confirmed')) {
-        setError('Please check your email and confirm your account');
-      } else if (signInError.message.includes('Too many requests')) {
-        setError('Too many attempts. Please try again later');
+    try {
+      const { data, error: signInError } = await signIn(email, password);
+      
+      if (signInError) {
+        // Provide more user-friendly error messages
+        if (signInError.message.includes('Invalid login credentials')) {
+          setError('Invalid email or password. Please check your credentials and try again.');
+        } else if (signInError.message.includes('Email not confirmed')) {
+          setError('Please check your email and click the confirmation link before signing in.');
+        } else if (signInError.message.includes('Too many requests')) {
+          setError('Too many login attempts. Please wait a moment before trying again.');
+        } else {
+          setError(signInError.message);
+        }
       } else {
-        setError(signInError.message);
+        // Success - migration will be handled automatically by guest context
+        if (isGuestMode) {
+          Alert.alert(
+            'Welcome back!',
+            'Signing you in... Your guest notes will be automatically migrated.',
+            [{ text: 'OK' }]
+          );
+        }
+        // AuthGuard will handle redirection automatically
       }
-    } else {
-      router.replace('/(tabs)');
+    } catch (error) {
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -73,6 +89,13 @@ export default function LoginScreen() {
             </View>
             <Text style={styles.title}>Welcome to Rememberly</Text>
             <Text style={styles.subtitle}>Your AI-powered memory assistant</Text>
+            {isGuestMode && (
+              <View style={styles.guestInfo}>
+                <Text style={styles.guestInfoText}>
+                  Sign in to access your saved notes and unlock unlimited features
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Form */}
@@ -248,5 +271,17 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.base,
     fontFamily: theme.typography.fontFamily.semiBold,
     color: theme.colors.primary[600],
+  },
+  guestInfo: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 24,
+  },
+  guestInfoText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 14,
+    fontFamily: theme.typography.fontFamily.regular,
+    textAlign: 'center',
   },
 });
