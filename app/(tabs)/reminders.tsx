@@ -12,12 +12,13 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { getCurrentUser } from '@/lib/auth';
 import { useReminderStore } from '@/lib/reminderStore';
+import { useNotesStore } from '@/lib/store';
 import { registerForPushNotificationsAsync, formatReminderTime, testLocalNotificationWhenClosed } from '@/lib/notifications';
 import { testSupabaseConnection } from '@/lib/supabase';
-import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2 } from 'lucide-react-native';
+import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2, FileText, Link2, Image as ImageIcon, File } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 type Priority = 'low' | 'medium' | 'high';
@@ -41,6 +42,8 @@ export default function RemindersScreen() {
     snoozeReminder,
     error 
   } = useReminderStore();
+  
+  const { notes } = useNotesStore();
   
   const [refreshing, setRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -95,9 +98,9 @@ export default function RemindersScreen() {
 
   async function initializeReminders() {
     try {
-      const token = await registerForPushNotificationsAsync();
+      const { permission } = await registerForPushNotificationsAsync();
       if (isMounted.current) {
-        setHasPermission(!!token);
+        setHasPermission(permission.granted);
       }
     } catch (error) {
       console.error('Failed to register for notifications:', error);
@@ -150,11 +153,11 @@ export default function RemindersScreen() {
             text: 'Enable', 
             onPress: async () => {
               try {
-                const token = await registerForPushNotificationsAsync();
+                const { permission } = await registerForPushNotificationsAsync();
                 if (isMounted.current) {
-                  setHasPermission(!!token);
+                  setHasPermission(permission.granted);
                 }
-                if (!token) {
+                if (!permission.granted) {
                   Alert.alert('Error', 'Notifications are required for reminders to work');
                   return;
                 }
@@ -232,6 +235,10 @@ export default function RemindersScreen() {
         { text: '1 day', onPress: () => snoozeReminder(id, 24 * 60) },
       ]
     );
+  }
+
+  function handleNavigateToNote(noteId: string) {
+    router.push(`/note/${noteId}`);
   }
 
   function onDateChange(event: any, selectedDate?: Date) {
@@ -315,9 +322,9 @@ export default function RemindersScreen() {
             style={styles.permissionBanner}
             onPress={async () => {
               try {
-                const token = await registerForPushNotificationsAsync();
+                const { permission } = await registerForPushNotificationsAsync();
                 if (isMounted.current) {
-                  setHasPermission(!!token);
+                  setHasPermission(permission.granted);
                 }
               } catch (error) {
                 Alert.alert('Error', 'Failed to enable notifications');
@@ -404,7 +411,9 @@ export default function RemindersScreen() {
                   onComplete={handleCompleteReminder}
                   onDelete={handleDeleteReminder}
                   onSnooze={handleSnoozeReminder}
+                  onNavigateToNote={handleNavigateToNote}
                   priorityColors={priorityColors}
+                  notes={notes}
                 />
               ))}
             </View>
@@ -428,7 +437,9 @@ export default function RemindersScreen() {
                   onComplete={handleCompleteReminder}
                   onDelete={handleDeleteReminder}
                   onSnooze={handleSnoozeReminder}
+                  onNavigateToNote={handleNavigateToNote}
                   priorityColors={priorityColors}
+                  notes={notes}
                 />
               ))}
             </View>
@@ -612,12 +623,39 @@ interface ReminderCardProps {
   onComplete: (id: string, title: string) => void;
   onDelete: (id: string, title: string) => void;
   onSnooze: (id: string, title: string) => void;
+  onNavigateToNote: (noteId: string) => void;
   priorityColors: any;
+  notes: any[];
 }
 
-function ReminderCard({ reminder, isOverdue, onComplete, onDelete, onSnooze, priorityColors }: ReminderCardProps) {
+function ReminderCard({ 
+  reminder, 
+  isOverdue, 
+  onComplete, 
+  onDelete, 
+  onSnooze, 
+  onNavigateToNote,
+  priorityColors,
+  notes 
+}: ReminderCardProps) {
   const remindDate = new Date(reminder.remind_at);
   const priority = reminder.priority || 'medium';
+  
+  // Find associated note if exists
+  const associatedNote = reminder.note_id ? notes.find(note => note.id === reminder.note_id) : null;
+  
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'url':
+        return <Link2 size={14} color="#059669" strokeWidth={2} />;
+      case 'file':
+        return <File size={14} color="#D97706" strokeWidth={2} />;
+      case 'image':
+        return <ImageIcon size={14} color="#DC2626" strokeWidth={2} />;
+      default:
+        return <FileText size={14} color="#2563EB" strokeWidth={2} />;
+    }
+  };
   
   return (
     <View style={[
@@ -647,6 +685,26 @@ function ReminderCard({ reminder, isOverdue, onComplete, onDelete, onSnooze, pri
         <Text style={styles.reminderDescription} numberOfLines={2}>
           {reminder.description}
         </Text>
+      )}
+
+      {/* Associated Note Section */}
+      {associatedNote && (
+        <TouchableOpacity 
+          style={styles.associatedNote}
+          onPress={() => onNavigateToNote(associatedNote.id)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.noteHeader}>
+            {getTypeIcon(associatedNote.type)}
+            <Text style={styles.noteLabel}>Related Note</Text>
+          </View>
+          <Text style={styles.noteTitle} numberOfLines={1}>
+            {associatedNote.title}
+          </Text>
+          <Text style={styles.noteSummary} numberOfLines={1}>
+            {associatedNote.summary || associatedNote.original_content}
+          </Text>
+        </TouchableOpacity>
       )}
 
       <View style={styles.reminderFooter}>
@@ -844,6 +902,38 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     lineHeight: 20,
     marginBottom: 12,
+  },
+  associatedNote: {
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  noteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  noteLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter-SemiBold',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  noteTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter-SemiBold',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  noteSummary: {
+    fontSize: 12,
+    fontFamily: 'Inter-Regular',
+    color: '#64748B',
   },
   reminderFooter: {
     flexDirection: 'row',

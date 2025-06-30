@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { router } from 'expo-router';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -527,7 +528,7 @@ export function formatReminderTime(date: Date): string {
   }
 }
 
-// Enhanced notification listeners with better error handling
+// Enhanced notification listeners with better error handling and navigation
 export function initializeNotificationListeners() {
   try {
     // Handle notification received while app is in foreground
@@ -563,26 +564,21 @@ export function initializeNotificationListeners() {
         // Handle navigation based on notification data
         if (data?.metadata?.noteId) {
           console.log('Navigate to note:', data.metadata.noteId);
-          // You can use router.push here to navigate
+          // Navigate to the specific note
+          router.push(`/note/${data.metadata.noteId}`);
+        } else if (data?.metadata?.reminderId) {
+          console.log('Navigate to reminders');
+          // Navigate to reminders screen
+          router.push('/(tabs)/reminders');
         } else if (data?.type === 'reminder') {
           console.log('Navigate to reminders');
           // Navigate to reminders screen
+          router.push('/(tabs)/reminders');
         }
       } catch (error) {
         console.error('Error handling notification response:', error);
       }
     });
-
-    // Handle notification dropped (iOS only) - Remove this as it may not be available in current version
-    // const droppedSubscription = Platform.OS === 'ios' 
-    //   ? Notifications.addNotificationsDroppedListener?.((notification) => {
-    //       try {
-    //         console.log('Notification dropped:', notification);
-    //       } catch (error) {
-    //         console.error('Error handling dropped notification:', error);
-    //       }
-    //     })
-    //   : null;
 
     return () => {
       try {

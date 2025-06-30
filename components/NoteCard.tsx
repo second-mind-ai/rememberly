@@ -17,8 +17,11 @@ import {
   ExternalLink,
   File,
   Download,
+  Bell,
+  BellRing,
 } from 'lucide-react-native';
 import { Database } from '@/lib/supabase';
+import { useReminderStore } from '@/lib/reminderStore';
 
 type Note = Database['public']['Tables']['notes']['Row'];
 
@@ -27,6 +30,15 @@ interface NoteCardProps {
 }
 
 export function NoteCard({ note }: NoteCardProps) {
+  const { reminders } = useReminderStore();
+  
+  // Check if this note has active reminders
+  const noteReminders = reminders.filter(reminder => reminder.note_id === note.id);
+  const hasActiveReminders = noteReminders.length > 0;
+  const nextReminder = noteReminders.sort((a, b) => 
+    new Date(a.remind_at).getTime() - new Date(b.remind_at).getTime()
+  )[0];
+
   const getTypeIcon = () => {
     switch (note.type) {
       case 'url':
@@ -66,6 +78,20 @@ export function NoteCard({ note }: NoteCardProps) {
       day: 'numeric',
       year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
     });
+  };
+
+  const formatReminderTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = date.getTime() - now.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+    if (diffMs < 0) return 'Overdue';
+    if (diffHours < 1) return 'Soon';
+    if (diffHours < 24) return `${Math.round(diffHours)}h`;
+    if (diffDays < 7) return `${Math.round(diffDays)}d`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   const handleOpenSourceLink = async (e: any) => {
@@ -234,6 +260,14 @@ export function NoteCard({ note }: NoteCardProps) {
             <Calendar size={12} color="#9CA3AF" strokeWidth={2} />
             <Text style={styles.dateText}>{formatDate(note.created_at)}</Text>
           </View>
+          {hasActiveReminders && (
+            <View style={styles.reminderIndicator}>
+              <BellRing size={12} color="#2563EB" strokeWidth={2} />
+              <Text style={styles.reminderText}>
+                {formatReminderTime(nextReminder.remind_at)}
+              </Text>
+            </View>
+          )}
           {displaySourceUrl && (
             <TouchableOpacity
               style={styles.linkButton}
@@ -359,6 +393,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter-Regular',
     color: '#9CA3AF',
+  },
+  reminderIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  reminderText: {
+    fontSize: 10,
+    fontFamily: 'Inter-SemiBold',
+    color: '#2563EB',
   },
   linkButton: {
     padding: 4,
