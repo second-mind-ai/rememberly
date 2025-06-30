@@ -1,179 +1,165 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
   Animated,
+  Text,
+  View,
+  StyleSheet,
+  TouchableOpacity,
   Dimensions,
-  Platform,
 } from 'react-native';
-import { Check, Bell, CircleAlert as AlertCircle, X } from 'lucide-react-native';
+import { CheckCircle, XCircle, Info, X } from 'lucide-react-native';
+import { theme } from '@/lib/theme';
 
 interface ToastProps {
   visible: boolean;
   message: string;
-  type?: 'success' | 'error' | 'info';
+  type: 'success' | 'error' | 'info';
+  onHide: () => void;
   duration?: number;
-  onHide?: () => void;
 }
 
-const { width: screenWidth } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-export function Toast({ 
-  visible, 
-  message, 
-  type = 'success', 
-  duration = 3000, 
-  onHide 
+export function Toast({
+  visible,
+  message,
+  type,
+  onHide,
+  duration = 3000,
 }: ToastProps) {
-  const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.8)).current;
+  const translateY = useRef(new Animated.Value(-100)).current;
 
   useEffect(() => {
     if (visible) {
       // Show animation
       Animated.parallel([
-        Animated.spring(translateY, {
-          toValue: 0,
-          tension: 100,
-          friction: 8,
-          useNativeDriver: true,
-        }),
         Animated.timing(opacity, {
           toValue: 1,
-          duration: 300,
+          duration: theme.animation.duration.fast,
           useNativeDriver: true,
         }),
-        Animated.spring(scale, {
-          toValue: 1,
-          tension: 100,
+        Animated.spring(translateY, {
+          toValue: 0,
+          tension: 80,
           friction: 8,
           useNativeDriver: true,
         }),
       ]).start();
 
       // Auto hide after duration
-      const timer = setTimeout(() => {
-        hideToast();
+      const timeout = setTimeout(() => {
+        handleHide();
       }, duration);
 
-      return () => clearTimeout(timer);
-    } else {
-      hideToast();
+      return () => clearTimeout(timeout);
     }
   }, [visible, duration]);
 
-  const hideToast = () => {
+  const handleHide = () => {
     Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: -100,
-        duration: 250,
-        useNativeDriver: true,
-      }),
       Animated.timing(opacity, {
         toValue: 0,
-        duration: 250,
+        duration: theme.animation.duration.fast,
         useNativeDriver: true,
       }),
-      Animated.timing(scale, {
-        toValue: 0.8,
-        duration: 250,
+      Animated.timing(translateY, {
+        toValue: -100,
+        duration: theme.animation.duration.fast,
         useNativeDriver: true,
       }),
     ]).start(() => {
-      onHide?.();
+      onHide();
     });
   };
 
+  if (!visible) return null;
+
   const getIcon = () => {
+    const iconProps = { size: 20, strokeWidth: 2 };
     switch (type) {
       case 'success':
-        return <Check size={20} color="#ffffff" strokeWidth={2} />;
+        return <CheckCircle {...iconProps} color={theme.colors.success.main} />;
       case 'error':
-        return <X size={20} color="#ffffff" strokeWidth={2} />;
+        return <XCircle {...iconProps} color={theme.colors.error.main} />;
       case 'info':
-        return <Bell size={20} color="#ffffff" strokeWidth={2} />;
-      default:
-        return <Check size={20} color="#ffffff" strokeWidth={2} />;
+        return <Info {...iconProps} color={theme.colors.info.main} />;
     }
   };
 
   const getBackgroundColor = () => {
     switch (type) {
       case 'success':
-        return '#059669';
+        return theme.colors.success.light;
       case 'error':
-        return '#DC2626';
+        return theme.colors.error.light;
       case 'info':
-        return '#2563EB';
-      default:
-        return '#059669';
+        return theme.colors.info.light;
     }
   };
 
-  if (!visible) return null;
+  const getTextColor = () => {
+    switch (type) {
+      case 'success':
+        return theme.colors.success.dark;
+      case 'error':
+        return theme.colors.error.dark;
+      case 'info':
+        return theme.colors.info.dark;
+    }
+  };
 
   return (
-    <View style={styles.container} pointerEvents="none">
-      <Animated.View
-        style={[
-          styles.toast,
-          {
-            backgroundColor: getBackgroundColor(),
-            transform: [
-              { translateY },
-              { scale },
-            ],
-            opacity,
-          },
-        ]}
-      >
-        <View style={styles.iconContainer}>
-          {getIcon()}
-        </View>
-        <Text style={styles.message} numberOfLines={2}>
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          opacity,
+          transform: [{ translateY }],
+          backgroundColor: getBackgroundColor(),
+        },
+      ]}
+    >
+      <View style={styles.content}>
+        {getIcon()}
+        <Text style={[styles.message, { color: getTextColor() }]}>
           {message}
         </Text>
-      </Animated.View>
-    </View>
+        <TouchableOpacity
+          onPress={handleHide}
+          style={styles.closeButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <X size={16} color={getTextColor()} strokeWidth={2} />
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
-    left: 20,
-    right: 20,
-    zIndex: 9999,
-    alignItems: 'center',
+    top: 50,
+    left: theme.spacing.md,
+    right: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    ...theme.shadows.md,
+    zIndex: 1000,
   },
-  toast: {
+  content: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    maxWidth: screenWidth - 40,
-    minWidth: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  iconContainer: {
-    marginRight: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 16,
-    padding: 4,
+    padding: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   message: {
     flex: 1,
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#ffffff',
-    lineHeight: 20,
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.medium,
+    lineHeight: theme.typography.fontSize.sm * theme.typography.lineHeight.base,
+  },
+  closeButton: {
+    padding: theme.spacing.xs,
   },
 });

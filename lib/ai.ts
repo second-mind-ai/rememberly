@@ -4,7 +4,8 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 
 export async function summarizeContent(
   content: string,
-  type: 'text' | 'url' | 'file' | 'image' = 'text'
+  type: 'text' | 'url' | 'file' | 'image' = 'text',
+  imageUrl?: string
 ): Promise<{
   title: string;
   summary: string;
@@ -33,7 +34,7 @@ export async function summarizeContent(
       OPENAI_API_KEY !== 'your_openai_api_key_here'
     ) {
       try {
-        const result = await analyzeWithGPT4(finalContent, type);
+        const result = await analyzeWithGPT4(finalContent, type, imageUrl);
 
         // Ensure minimum processing time for better UX
         const processingTime = Date.now() - startTime;
@@ -50,14 +51,14 @@ export async function summarizeContent(
           error
         );
         // Fallback to local analysis on API error
-        return await performEnhancedLocalAnalysis(finalContent, type);
+        return await performEnhancedLocalAnalysis(finalContent, type, imageUrl);
       }
     } else {
       // Fallback to enhanced local analysis
       console.log(
         'OpenAI API key not configured or invalid, using enhanced local analysis'
       );
-      return await performEnhancedLocalAnalysis(finalContent, type);
+      return await performEnhancedLocalAnalysis(finalContent, type, imageUrl);
     }
   } catch (error) {
     console.error('AI summarization error:', error);
@@ -68,14 +69,63 @@ export async function summarizeContent(
 
 async function analyzeWithGPT4(
   content: string,
-  type: string
+  type: string,
+  imageUrl?: string
 ): Promise<{
   title: string;
   summary: string;
   tags: string[];
 }> {
   try {
-    const prompt = createAnalysisPrompt(content, type);
+    const messages = [
+      {
+        role: 'system',
+        content:
+          "You are an intelligent content analyzer designed to process notes in any domain, including images. Your core tasks are: Generate optimized, context-aware titles that are clear, engaging, and summarize the main idea. Write concise summaries that capture key points in a readable and informative way. Extract relevant, searchable tags that help organize and retrieve the note easily. For images, describe what you see and extract meaningful insights. You must analyze the input deeply, understand the full context, and always respond in the **same language as the user's input**, with special support for Arabic (ar) and other multilingual content. Your outputs must be: Title: 1 line, compelling and context-representative. Summary: 2–3 sentences capturing the core insight. Tags: 3–7 keywords, comma-separated, no hashtags.",
+      }
+    ];
+
+    // Handle image content with vision capabilities
+    if (type === 'image' && imageUrl) {
+      messages.push({
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `Analyze this image and provide a JSON response with exactly this structure:
+
+{
+  "title": "A smart, engaging title describing the image (max 8 words)",
+  "summary": "A clear, concise summary describing what's in the image and its significance (2-4 sentences)",
+  "tags": ["array", "of", "relevant", "tags", "describing", "image", "content", "max", "10", "tags"]
+}
+
+Additional context: ${content}
+
+Requirements:
+- Title should describe what's in the image
+- Summary should explain the image content and any visible text or important details
+- Tags should include visual elements, objects, themes, and relevant keywords
+- Focus on making this useful for someone organizing their visual notes
+- Ensure the response is valid JSON only`
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: imageUrl,
+              detail: 'high'
+            }
+          }
+        ]
+      });
+    } else {
+      // Handle text content
+      const prompt = createAnalysisPrompt(content, type);
+      messages.push({
+        role: 'user',
+        content: prompt,
+      });
+    }
 
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
@@ -84,18 +134,8 @@ async function analyzeWithGPT4(
         Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Use gpt-4o-mini instead of gpt-4 for better availability
-        messages: [
-          {
-            role: 'system',
-            content:
-              "You are an intelligent content analyzer designed to process notes in any domain. Your core tasks are: Generate optimized, context-aware titles that are clear, engaging, and summarize the main idea. Write concise summaries that capture key points in a readable and informative way. Extract relevant, searchable tags that help organize and retrieve the note easily. You must analyze the input deeply, understand the full context, and always respond in the **same language as the user's input**, with special support for Arabic (ar) and other multilingual content. Your outputs must be: Title: 1 line, compelling and context-representative. Summary: 2–3 sentences capturing the core insight. Tags: 3–7 keywords, comma-separated, no hashtags.",
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
+        model: 'gpt-4o', // Use gpt-4o for vision capabilities
+        messages: messages,
         max_tokens: 500,
         temperature: 0.3,
       }),
@@ -176,7 +216,8 @@ function parseAIResponse(response: string): {
 
 async function performEnhancedLocalAnalysis(
   content: string,
-  type: string
+  type: string,
+  imageUrl?: string
 ): Promise<{
   title: string;
   summary: string;
@@ -184,6 +225,15 @@ async function performEnhancedLocalAnalysis(
 }> {
   // Simulate processing time for better UX
   await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  // Handle image content specially
+  if (type === 'image' && imageUrl) {
+    return {
+      title: generateImageTitle(content, imageUrl),
+      summary: generateImageSummary(content, imageUrl),
+      tags: generateImageTags(content, imageUrl),
+    };
+  }
 
   const analysis = analyzeContentStructure(content);
   const semantic = performSemanticAnalysis(content);
@@ -1201,4 +1251,58 @@ function analyzeComplexity(content: string): 'simple' | 'moderate' | 'complex' {
   if (avgWordsPerSentence > 25) return 'complex';
   if (avgWordsPerSentence > 15) return 'moderate';
   return 'simple';
+}
+
+// Image processing functions for local analysis
+function generateImageTitle(content: string, imageUrl: string): string {
+  // Extract filename from URL for title generation
+  const filename = imageUrl.split('/').pop()?.split('?')[0] || 'image';
+  const cleanFilename = filename.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
+  
+  // If there's additional content, use it to enhance the title
+  if (content && content.trim() && !content.includes('Image file:')) {
+    const words = content.trim().split(' ').slice(0, 6).join(' ');
+    return `Image: ${words}`;
+  }
+  
+  // Generate title based on timestamp or filename
+  const timestamp = new Date().toLocaleDateString();
+  return `Image - ${cleanFilename || timestamp}`;
+}
+
+function generateImageSummary(content: string, imageUrl: string): string {
+  const filename = imageUrl.split('/').pop()?.split('?')[0] || 'image';
+  
+  if (content && content.trim() && !content.includes('Image file:')) {
+    return `This image was uploaded with the following context: ${content.substring(0, 200)}${content.length > 200 ? '...' : ''}`;
+  }
+  
+  return `An image file (${filename}) has been uploaded to this note. The image is stored securely and can be viewed in the note details. Consider adding a description to help remember what this image contains.`;
+}
+
+function generateImageTags(content: string, imageUrl: string): string[] {
+  const tags = ['image', 'visual', 'media'];
+  
+  // Extract file extension for tag
+  const filename = imageUrl.split('/').pop()?.split('?')[0] || '';
+  const extension = filename.split('.').pop()?.toLowerCase();
+  if (extension) {
+    tags.push(extension);
+  }
+  
+  // Add date-based tag
+  const month = new Date().toLocaleDateString('en', { month: 'short' }).toLowerCase();
+  tags.push(month);
+  
+  // Extract keywords from content if available
+  if (content && content.trim() && !content.includes('Image file:')) {
+    const words = content.toLowerCase().match(/\b\w+\b/g) || [];
+    const keywords = words.filter(word => 
+      word.length > 3 && 
+      !['this', 'that', 'with', 'from', 'they', 'were', 'been', 'have', 'will'].includes(word)
+    ).slice(0, 3);
+    tags.push(...keywords);
+  }
+  
+  return [...new Set(tags)].slice(0, 8);
 }

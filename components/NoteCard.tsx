@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Linking,
   Alert,
-  Image,
+  Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import {
@@ -16,12 +16,11 @@ import {
   Calendar,
   ExternalLink,
   File,
-  Download,
-  Bell,
   BellRing,
 } from 'lucide-react-native';
 import { Database } from '@/lib/supabase';
 import { useReminderStore } from '@/lib/reminderStore';
+import { theme } from '@/lib/theme';
 
 type Note = Database['public']['Tables']['notes']['Row'];
 
@@ -29,8 +28,10 @@ interface NoteCardProps {
   note: Note;
 }
 
+// Optimize with React.memo and custom comparison
 export const NoteCard = React.memo(({ note }: NoteCardProps) => {
   const { reminders } = useReminderStore();
+  const [scaleAnim] = React.useState(new Animated.Value(1));
   
   // Check if this note has active reminders
   const noteReminders = reminders.filter(reminder => reminder.note_id === note.id);
@@ -40,28 +41,29 @@ export const NoteCard = React.memo(({ note }: NoteCardProps) => {
   )[0];
 
   const getTypeIcon = () => {
+    const iconProps = { size: 16, strokeWidth: 1.5 };
     switch (note.type) {
       case 'url':
-        return <Link2 size={16} color="#059669" strokeWidth={2} />;
+        return <Link2 {...iconProps} color={theme.colors.success.main} />;
       case 'file':
-        return <File size={16} color="#D97706" strokeWidth={2} />;
+        return <File {...iconProps} color={theme.colors.warning.main} />;
       case 'image':
-        return <ImageIcon size={16} color="#DC2626" strokeWidth={2} />;
+        return <ImageIcon {...iconProps} color={theme.colors.error.main} />;
       default:
-        return <FileText size={16} color="#2563EB" strokeWidth={2} />;
+        return <FileText {...iconProps} color={theme.colors.primary[600]} />;
     }
   };
 
   const getTypeColor = () => {
     switch (note.type) {
       case 'url':
-        return '#F0FDF4';
+        return theme.colors.success.light;
       case 'file':
-        return '#FEF3C7';
+        return theme.colors.warning.light;
       case 'image':
-        return '#FEF2F2';
+        return theme.colors.error.light;
       default:
-        return '#EFF6FF';
+        return theme.colors.primary[50];
     }
   };
 
@@ -95,7 +97,7 @@ export const NoteCard = React.memo(({ note }: NoteCardProps) => {
   };
 
   const handleOpenSourceLink = async (e: any) => {
-    e.stopPropagation(); // Prevent card navigation when clicking link
+    e.stopPropagation();
 
     if (!displaySourceUrl) return;
 
@@ -107,12 +109,27 @@ export const NoteCard = React.memo(({ note }: NoteCardProps) => {
         Alert.alert('Error', 'Cannot open this URL');
       }
     } catch (error) {
+      console.error('Failed to open source URL:', error);
       Alert.alert('Error', 'Failed to open URL');
     }
   };
 
   const handleCardPress = () => {
-    router.push(`/note/${note.id}`);
+    // Animate press
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.98,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      router.push(`/note/${note.id}`);
+    });
   };
 
   const extractLinksFromText = (text: string): string[] => {
@@ -121,7 +138,7 @@ export const NoteCard = React.memo(({ note }: NoteCardProps) => {
   };
 
   const handleTextLinkPress = async (url: string, e: any) => {
-    e.stopPropagation(); // Prevent card navigation
+    e.stopPropagation();
 
     try {
       const supported = await Linking.canOpenURL(url);
@@ -131,103 +148,9 @@ export const NoteCard = React.memo(({ note }: NoteCardProps) => {
         Alert.alert('Error', 'Cannot open this URL');
       }
     } catch (error) {
+      console.error('Failed to open text URL:', error);
       Alert.alert('Error', 'Failed to open URL');
     }
-  };
-
-  const renderTextWithLinks = (text: string) => {
-    const links = extractLinksFromText(text);
-
-    if (links.length === 0) {
-      return (
-        <Text style={styles.summary} numberOfLines={3}>
-          {text}
-        </Text>
-      );
-    }
-
-    let parts = [text];
-    links.forEach((link) => {
-      const newParts: any[] = [];
-      parts.forEach((part) => {
-        if (typeof part === 'string') {
-          const splitParts = part.split(link);
-          for (let i = 0; i < splitParts.length; i++) {
-            if (i > 0) {
-              newParts.push(
-                <TouchableOpacity
-                  key={`${link}-${i}`}
-                  onPress={(e) => handleTextLinkPress(link, e)}
-                  style={styles.inlineLink}
-                >
-                  <Text style={styles.inlineLinkText}>
-                    {link.length > 30 ? `${link.substring(0, 30)}...` : link}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }
-            if (splitParts[i]) {
-              newParts.push(splitParts[i]);
-            }
-          }
-        } else {
-          newParts.push(part);
-        }
-      });
-      parts = newParts;
-    });
-
-    return (
-      <View style={styles.textWithLinks}>
-        <Text style={styles.summary} numberOfLines={3}>
-          {parts.map((part, index) => (typeof part === 'string' ? part : part))}
-        </Text>
-      </View>
-    );
-  };
-
-  const renderFilePreview = () => {
-    if (!note.file_url) return null;
-
-    if (note.type === 'image') {
-      return (
-        <View style={styles.imagePreview}>
-          <Image
-            source={{ uri: note.file_url }}
-            style={styles.previewImage}
-            onError={() => {
-              // Handle image loading error - could show placeholder
-              console.log('Failed to load image:', note.file_url);
-            }}
-          />
-          <View style={styles.imageOverlay}>
-            <ImageIcon size={16} color="#ffffff" strokeWidth={2} />
-            <Text style={styles.imageOverlayText}>Tap to view</Text>
-          </View>
-        </View>
-      );
-    }
-
-    if (note.type === 'file') {
-      // Extract filename from file_url or use title
-      const fileName = note.file_url.split('/').pop() || note.title;
-      return (
-        <View style={styles.filePreview}>
-          <File size={24} color="#D97706" strokeWidth={1.5} />
-          <View style={styles.fileInfo}>
-            <Text style={styles.fileName} numberOfLines={1}>
-              {fileName}
-            </Text>
-            <Text style={styles.fileType}>
-              {note.type.toUpperCase()} • Tap to open
-            </Text>
-          </View>
-          <Download size={16} color="#6B7280" strokeWidth={2} />
-        </View>
-      );
-    }
-
-    return null;
   };
 
   // Check if content has links
@@ -239,116 +162,75 @@ export const NoteCard = React.memo(({ note }: NoteCardProps) => {
   // Use first content link as source URL if no source_url exists
   const displaySourceUrl =
     note.source_url || (hasContentLinks ? allContentLinks[0] : null);
-  const remainingContentLinks = note.source_url
-    ? allContentLinks
-    : allContentLinks.slice(1);
 
   return (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={handleCardPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.header}>
-        <View
-          style={[styles.typeContainer, { backgroundColor: getTypeColor() }]}
-        >
-          {getTypeIcon()}
-        </View>
-        <View style={styles.headerRight}>
-          <View style={styles.dateContainer}>
-            <Calendar size={12} color="#9CA3AF" strokeWidth={2} />
-            <Text style={styles.dateText}>{formatDate(note.created_at)}</Text>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <TouchableOpacity
+        style={styles.card}
+        onPress={handleCardPress}
+        activeOpacity={0.9}
+      >
+        <View style={styles.header}>
+          <View
+            style={[styles.typeIndicator, { backgroundColor: getTypeColor() }]}
+          >
+            {getTypeIcon()}
           </View>
-          {hasActiveReminders && (
-            <View style={styles.reminderIndicator}>
-              <BellRing size={12} color="#2563EB" strokeWidth={2} />
-              <Text style={styles.reminderText}>
-                {formatReminderTime(nextReminder.remind_at)}
-              </Text>
+          <View style={styles.headerInfo}>
+            <View style={styles.dateContainer}>
+              <Calendar size={12} color={theme.colors.text.tertiary} strokeWidth={1.5} />
+              <Text style={styles.dateText}>{formatDate(note.created_at)}</Text>
             </View>
-          )}
-          {displaySourceUrl && (
-            <TouchableOpacity
-              style={styles.linkButton}
-              onPress={handleOpenSourceLink}
-              activeOpacity={0.7}
-            >
-              <ExternalLink size={14} color="#2563EB" strokeWidth={2} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      <Text style={styles.title} numberOfLines={2}>
-        {note.title || 'Untitled Note'}
-      </Text>
-
-      {/* Render file preview if available */}
-      {renderFilePreview()}
-
-      {/* Render summary with clickable links */}
-      {renderTextWithLinks(note.summary || note.original_content)}
-
-      {/* Source URL section */}
-      {displaySourceUrl && (
-        <TouchableOpacity
-          style={styles.sourceLink}
-          onPress={(e) => {
-            e.stopPropagation();
-            handleTextLinkPress(displaySourceUrl, e);
-          }}
-          activeOpacity={0.7}
-        >
-          <Link2 size={12} color="#2563EB" strokeWidth={2} />
-          <Text style={styles.sourceLinkText} numberOfLines={1}>
-            {displaySourceUrl.replace(/^https?:\/\//, '').replace(/^www\./, '')}
-          </Text>
-          <ExternalLink size={12} color="#2563EB" strokeWidth={2} />
-        </TouchableOpacity>
-      )}
-
-      {/* Additional links found in content */}
-      {remainingContentLinks.length > 0 && (
-        <View style={styles.additionalLinksContainer}>
-          <View style={styles.additionalLinksHeader}>
-            <Link2 size={12} color="#6B7280" strokeWidth={2} />
-            <Text style={styles.additionalLinksTitle}>
-              {remainingContentLinks.length} additional link
-              {remainingContentLinks.length !== 1 ? 's' : ''} found
-            </Text>
+            {hasActiveReminders && (
+              <View style={styles.reminderBadge}>
+                <BellRing size={12} color={theme.colors.primary[600]} strokeWidth={1.5} />
+                <Text style={styles.reminderText}>
+                  {formatReminderTime(nextReminder.remind_at)}
+                </Text>
+              </View>
+            )}
           </View>
-          {remainingContentLinks.slice(0, 2).map((link, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.additionalLink}
-              onPress={(e) => handleTextLinkPress(link, e)}
-              activeOpacity={0.7}
-            >
-              <ExternalLink size={10} color="#6B7280" strokeWidth={2} />
-              <Text style={styles.additionalLinkText} numberOfLines={1}>
-                {link.replace(/^https?:\/\//, '').replace(/^www\./, '')}
-              </Text>
-            </TouchableOpacity>
-          ))}
         </View>
-      )}
 
-      {note.tags && note.tags.length > 0 && (
-        <View style={styles.tagsContainer}>
-          {note.tags.slice(0, 3).map((tag, index) => (
-            <View key={index} style={styles.tag}>
-              <Text style={styles.tagText}>{tag}</Text>
-            </View>
-          ))}
-          {note.tags.length > 3 && (
-            <Text style={styles.moreTagsText}>
-              +{note.tags.length - 3} more
+        <Text style={styles.title} numberOfLines={2}>
+          {note.title || 'Untitled Note'}
+        </Text>
+
+        <Text style={styles.summary} numberOfLines={3}>
+          {note.summary || note.original_content}
+        </Text>
+
+        {/* Tags */}
+        {note.tags && note.tags.length > 0 && (
+          <View style={styles.tagsContainer}>
+            {note.tags.slice(0, 3).map((tag, index) => (
+              <View key={index} style={styles.tag}>
+                <Text style={styles.tagText}>{tag}</Text>
+              </View>
+            ))}
+            {note.tags.length > 3 && (
+              <Text style={styles.moreTagsText}>
+                +{note.tags.length - 3}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {/* Source Link */}
+        {displaySourceUrl && (
+          <TouchableOpacity
+            style={styles.sourceLink}
+            onPress={handleOpenSourceLink}
+            activeOpacity={0.7}
+          >
+            <ExternalLink size={14} color={theme.colors.primary[600]} strokeWidth={1.5} />
+            <Text style={styles.sourceLinkText} numberOfLines={1}>
+              {displaySourceUrl.replace(/^https?:\/\//, '').replace(/^www\./, '')}
             </Text>
-          )}
-        </View>
-      )}
-    </TouchableOpacity>
+          </TouchableOpacity>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
   );
 }, (prevProps, nextProps) => {
   // Custom comparison to prevent unnecessary re-renders
@@ -364,219 +246,102 @@ NoteCard.displayName = 'NoteCard';
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#F3F4F6',
+    backgroundColor: theme.colors.background.primary,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    ...theme.shadows.sm,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    alignItems: 'flex-start',
+    marginBottom: theme.spacing.md,
   },
-  typeContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
+  typeIndicator: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerRight: {
+  headerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: theme.spacing.sm,
   },
   dateContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: theme.spacing.xs,
   },
   dateText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    fontSize: theme.typography.fontSize.xs,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.tertiary,
   },
-  reminderIndicator: {
+  reminderBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 6,
+    gap: theme.spacing.xs,
+    backgroundColor: theme.colors.primary[50],
+    paddingHorizontal: theme.spacing.sm,
     paddingVertical: 2,
-    borderRadius: 8,
+    borderRadius: theme.borderRadius.full,
   },
   reminderText: {
-    fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-    color: '#2563EB',
-  },
-  linkButton: {
-    padding: 4,
-    borderRadius: 6,
-    backgroundColor: '#EFF6FF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontSize: theme.typography.fontSize.xs,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.primary[600],
   },
   title: {
-    fontSize: 16,
-    fontFamily: 'Inter-SemiBold',
-    color: '#111827',
-    lineHeight: 22,
-    marginBottom: 8,
-  },
-  imagePreview: {
-    borderRadius: 8,
-    marginBottom: 12,
-    overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#F3F4F6',
-  },
-  previewImage: {
-    width: '100%',
-    height: 120,
-    backgroundColor: '#F3F4F6',
-    resizeMode: 'cover',
-  },
-  imageOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    gap: 6,
-  },
-  imageOverlayText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#ffffff',
-  },
-  filePreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#FCD34D',
-  },
-  fileInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  fileName: {
-    fontSize: 14,
-    fontFamily: 'Inter-SemiBold',
-    color: '#92400E',
-    marginBottom: 2,
-  },
-  fileType: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#B45309',
+    fontSize: theme.typography.fontSize.lg,
+    fontFamily: theme.typography.fontFamily.semiBold,
+    color: theme.colors.text.primary,
+    lineHeight: theme.typography.fontSize.lg * theme.typography.lineHeight.tight,
+    marginBottom: theme.spacing.sm,
   },
   summary: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  textWithLinks: {
-    marginBottom: 12,
-  },
-  inlineLink: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginHorizontal: 2,
-  },
-  inlineLinkText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#2563EB',
-    textDecorationLine: 'underline',
-  },
-  sourceLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginBottom: 12,
-    gap: 6,
-  },
-  sourceLinkText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#2563EB',
-    flex: 1,
-  },
-  additionalLinksContainer: {
-    backgroundColor: '#F9FAFB',
-    padding: 8,
-    borderRadius: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  additionalLinksHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 6,
-  },
-  additionalLinksTitle: {
-    fontSize: 11,
-    fontFamily: 'Inter-Medium',
-    color: '#6B7280',
-  },
-  additionalLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-  },
-  additionalLinkText: {
-    fontSize: 11,
-    fontFamily: 'Inter-Regular',
-    color: '#6B7280',
-    flex: 1,
+    fontSize: theme.typography.fontSize.base,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.secondary,
+    lineHeight: theme.typography.fontSize.base * theme.typography.lineHeight.relaxed,
+    marginBottom: theme.spacing.md,
   },
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
   tag: {
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    backgroundColor: theme.colors.neutral[100],
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.borderRadius.full,
   },
   tagText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Medium',
-    color: '#2563EB',
+    fontSize: theme.typography.fontSize.xs,
+    fontFamily: theme.typography.fontFamily.medium,
+    color: theme.colors.text.secondary,
   },
   moreTagsText: {
-    fontSize: 12,
-    fontFamily: 'Inter-Regular',
-    color: '#9CA3AF',
+    fontSize: theme.typography.fontSize.xs,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.text.tertiary,
+    paddingHorizontal: theme.spacing.xs,
+    alignSelf: 'center',
   },
+  sourceLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.xs,
+  },
+  sourceLinkText: {
+    fontSize: theme.typography.fontSize.sm,
+    fontFamily: theme.typography.fontFamily.regular,
+    color: theme.colors.primary[600],
+    flex: 1,
+  },
+  // Removed all other unused styles for cleaner code
 });
