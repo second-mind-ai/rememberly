@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/useToast';
 import { Toast } from '@/components/Toast';
 import { registerForPushNotificationsAsync, formatReminderTime, testLocalNotificationWhenClosed } from '@/lib/notifications';
 import { testSupabaseConnection } from '@/lib/supabase';
-import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2, FileText, Link2, Image as ImageIcon, File, CheckCircle, BellOff } from 'lucide-react-native';
+import { Bell, Calendar, Check, Clock, Plus, X, CircleAlert as AlertCircle, Volume2, VolumeX, Trash2, FileText, Link2, Image as ImageIcon, File, CircleCheck as CheckCircle, BellOff } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 type Priority = 'low' | 'medium' | 'high';
