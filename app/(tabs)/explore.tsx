@@ -109,7 +109,7 @@ export default function ExploreScreen() {
     outputRange: [0, 1],
   });
 
-  const handleFilterLayout = (event: any) => {
+  const handleFilterLayout = (event: { nativeEvent: { layout: { height: number } } }) => {
     const { height } = event.nativeEvent.layout;
     if (height > 0 && height !== filterHeight) {
       setFilterHeight(height);

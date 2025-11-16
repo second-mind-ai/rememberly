@@ -10,13 +10,36 @@ import { Platform } from 'react-native';
 
 // Note: Notification handler is configured in lib/notifications.ts to avoid conflicts
 
-export function parseReminderTime(naturalInput: string): Date | null {
+export function parseReminderTime(naturalInput: string, maxDaysInFuture: number = 730): Date | null {
   try {
     const parsed = chrono.parseDate(naturalInput);
-    if (parsed && parsed > new Date()) {
-      return parsed;
+    const now = new Date();
+
+    // Validation: Date must be valid and in the future
+    if (!parsed || isNaN(parsed.getTime())) {
+      console.warn('Invalid date parsed from input:', naturalInput);
+      return null;
     }
-    return null;
+
+    if (parsed <= now) {
+      console.warn('Parsed date is in the past:', parsed);
+      return null;
+    }
+
+    // Validation: Date must not be too far in the future (default max 2 years)
+    const maxDate = new Date(now.getTime() + maxDaysInFuture * 24 * 60 * 60 * 1000);
+    if (parsed > maxDate) {
+      console.warn(`Parsed date is too far in the future (max ${maxDaysInFuture} days):`, parsed);
+      return null;
+    }
+
+    // Validation: Date must be reasonable (not year 9999, etc.)
+    if (parsed.getFullYear() > 2100) {
+      console.warn('Parsed date year is unreasonably far in future:', parsed.getFullYear());
+      return null;
+    }
+
+    return parsed;
   } catch (error) {
     console.error('Error parsing reminder time:', error);
     return null;
