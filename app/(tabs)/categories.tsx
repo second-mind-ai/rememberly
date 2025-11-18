@@ -22,7 +22,7 @@ interface Category {
   id: string;
   name: string;
   description: string;
-  icon: any;
+  icon: React.ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
   color: string;
   backgroundColor: string;
   count: number;
@@ -181,7 +181,7 @@ export default function CategoriesScreen() {
     }
   }
 
-  function handleScrollPositionChange(event: any) {
+  function handleScrollPositionChange(event: { nativeEvent: { contentOffset: { y: number } } }) {
     if (!selectedCategory && isMounted.current) {
       setScrollPosition(event.nativeEvent.contentOffset.y);
     }

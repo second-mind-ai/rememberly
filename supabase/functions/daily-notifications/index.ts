@@ -1,8 +1,24 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// SECURITY: Restrict CORS to specific origins instead of wildcard
+// In production, set ALLOWED_ORIGINS environment variable to your app's domain
+const allowedOrigins = Deno.env.get('ALLOWED_ORIGINS')?.split(',') || []
+const defaultOrigins = ['http://localhost:8081', 'http://localhost:19006', 'exp://']
+
+function getCorsHeaders(origin: string | null): Record<string, string> {
+  const allowed = [...allowedOrigins, ...defaultOrigins]
+  const isAllowed = origin && allowed.some(allowed => origin.startsWith(allowed))
+
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? origin : defaultOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  }
+}
+
+// For OPTIONS requests, use default CORS headers
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': defaultOrigins[0],
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
@@ -44,10 +60,56 @@ interface UserProfile {
   }
 }
 
+interface ExpoPushResponse {
+  status: 'ok' | 'error'
+  message?: string
+  details?: Record<string, unknown>
+}
+
+/**
+ * Sanitize error messages to prevent information disclosure
+ */
+function sanitizeError(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+
+    // Safe error messages
+    if (message.includes('rate limit')) {
+      return 'Rate limit exceeded';
+    }
+
+    if (message.includes('authentication') || message.includes('unauthorized')) {
+      return 'Authentication failed';
+    }
+
+    if (message.includes('permission') || message.includes('forbidden')) {
+      return 'Permission denied';
+    }
+
+    if (message.includes('not found')) {
+      return 'Resource not found';
+    }
+
+    if (message.includes('network') || message.includes('timeout')) {
+      return 'Network error occurred';
+    }
+
+    // Don't expose internal details - return generic message
+    if (message.includes('database') || message.includes('query') || message.includes('sql')) {
+      return 'Internal server error';
+    }
+  }
+
+  return 'An internal error occurred';
+}
+
 serve(async (req) => {
+  const origin = req.headers.get('Origin')
+  const responseHeaders = getCorsHeaders(origin)
+
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: responseHeaders })
   }
 
   try {
@@ -103,7 +165,7 @@ serve(async (req) => {
           p_job_name: 'daily_notifications',
           p_status: 'error',
           p_message: 'Failed to fetch notes',
-          p_error_details: notesError.message
+          p_error_details: sanitizeError(notesError)
         })
       } catch (logError) {
         console.warn('⚠️ Failed to log error:', logError)
@@ -126,14 +188,14 @@ serve(async (req) => {
       }
       
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           message: 'No recent notes found',
-          notificationsSent: 0 
+          notificationsSent: 0
         }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200 
+        {
+          headers: { ...responseHeaders, 'Content-Type': 'application/json' },
+          status: 200
         }
       )
     }
@@ -170,7 +232,7 @@ serve(async (req) => {
           p_job_name: 'daily_notifications',
           p_status: 'error',
           p_message: 'Failed to fetch user profiles',
-          p_error_details: profilesError.message
+          p_error_details: sanitizeError(profilesError)
         })
       } catch (logError) {
         console.warn('⚠️ Failed to log error:', logError)
@@ -273,8 +335,8 @@ serve(async (req) => {
         
         // Count successful notifications
         if (Array.isArray(result.data)) {
-          notificationsSent = result.data.filter((item: any) => item.status === 'ok').length
-          const errors = result.data.filter((item: any) => item.status === 'error')
+          notificationsSent = result.data.filter((item: ExpoPushResponse) => item.status === 'ok').length
+          const errors = result.data.filter((item: ExpoPushResponse) => item.status === 'error')
           
           if (errors.length > 0) {
             console.warn('⚠️ Some notifications failed:', errors)
@@ -303,7 +365,7 @@ serve(async (req) => {
             p_job_name: 'daily_notifications',
             p_status: 'error',
             p_message: 'Failed to send notifications',
-            p_error_details: error instanceof Error ? error.message : 'Unknown error'
+            p_error_details: sanitizeError(error)
           })
         } catch (logError) {
           console.warn('⚠️ Failed to log error:', logError)
@@ -336,40 +398,40 @@ serve(async (req) => {
         timestamp: new Date().toISOString(),
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...responseHeaders, 'Content-Type': 'application/json' },
         status: 200,
       }
     )
 
   } catch (error) {
     console.error('❌ Daily notifications function error:', error)
-    
+
     // Try to log the error if Supabase is available
     try {
       const supabaseUrl = Deno.env.get('SUPABASE_URL')
       const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-      
+
       if (supabaseUrl && supabaseServiceKey) {
         const supabase = createClient(supabaseUrl, supabaseServiceKey)
         await supabase.rpc('log_cron_job_execution', {
           p_job_name: 'daily_notifications',
           p_status: 'error',
           p_message: 'Function execution failed',
-          p_error_details: error instanceof Error ? error.message : 'Unknown error'
+          p_error_details: sanitizeError(error)
         })
       }
     } catch (logError) {
       console.error('❌ Failed to log error:', logError)
     }
-    
+
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: sanitizeError(error),
         timestamp: new Date().toISOString(),
       }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...responseHeaders, 'Content-Type': 'application/json' },
         status: 500,
       }
     )

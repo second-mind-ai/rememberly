@@ -1,8 +1,25 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// SECURITY: Restrict CORS to specific origins instead of wildcard
+// In production, set ALLOWED_ORIGINS environment variable to your app's domain
+const allowedOrigins = Deno.env.get('ALLOWED_ORIGINS')?.split(',') || []
+const defaultOrigins = ['http://localhost:8081', 'http://localhost:19006', 'exp://']
+
+function getCorsHeaders(origin: string | null): Record<string, string> {
+  const allowed = [...allowedOrigins, ...defaultOrigins]
+  const isAllowed = origin && allowed.some(allowed => origin.startsWith(allowed))
+
+  return {
+    'Access-Control-Allow-Origin': isAllowed ? origin : defaultOrigins[0],
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  }
+}
+
+// For OPTIONS requests, use default CORS headers
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': defaultOrigins[0],
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
@@ -270,15 +287,18 @@ async function performEnhancedLocalAnalysis(
 }
 
 serve(async (req) => {
+  const origin = req.headers.get('Origin')
+  const responseHeaders = getCorsHeaders(origin)
+
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: responseHeaders })
   }
 
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { 
-      status: 405, 
-      headers: corsHeaders 
+    return new Response('Method not allowed', {
+      status: 405,
+      headers: responseHeaders
     })
   }
 
@@ -296,9 +316,9 @@ serve(async (req) => {
     // Verify authentication
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response('Unauthorized', { 
-        status: 401, 
-        headers: corsHeaders 
+      return new Response('Unauthorized', {
+        status: 401,
+        headers: responseHeaders
       })
     }
 
@@ -306,18 +326,18 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
 
     if (authError || !user) {
-      return new Response('Unauthorized', { 
-        status: 401, 
-        headers: corsHeaders 
+      return new Response('Unauthorized', {
+        status: 401,
+        headers: responseHeaders
       })
     }
 
     // Check rate limiting
     if (!checkRateLimit(user.id)) {
-      return new Response('Rate limit exceeded', { 
-        status: 429, 
+      return new Response('Rate limit exceeded', {
+        status: 429,
         headers: {
-          ...corsHeaders,
+          ...responseHeaders,
           'Retry-After': '60'
         }
       })
@@ -327,17 +347,17 @@ serve(async (req) => {
     const { content, type, imageUrl }: AnalysisRequest = await req.json()
 
     if (!content || !type) {
-      return new Response('Missing required fields: content and type', { 
-        status: 400, 
-        headers: corsHeaders 
+      return new Response('Missing required fields: content and type', {
+        status: 400,
+        headers: responseHeaders
       })
     }
 
     // Validate content length
     if (content.length > 10000) {
-      return new Response('Content too long (max 10,000 characters)', { 
-        status: 400, 
-        headers: corsHeaders 
+      return new Response('Content too long (max 10,000 characters)', {
+        status: 400,
+        headers: responseHeaders
       })
     }
 
@@ -363,9 +383,9 @@ serve(async (req) => {
         timestamp: new Date().toISOString(),
       }),
       {
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
+        headers: {
+          ...responseHeaders,
+          'Content-Type': 'application/json'
         },
         status: 200,
       }
@@ -373,7 +393,7 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('❌ AI analysis function error:', error)
-    
+
     return new Response(
       JSON.stringify({
         success: false,
@@ -381,9 +401,9 @@ serve(async (req) => {
         timestamp: new Date().toISOString(),
       }),
       {
-        headers: { 
-          ...corsHeaders, 
-          'Content-Type': 'application/json' 
+        headers: {
+          ...responseHeaders,
+          'Content-Type': 'application/json'
         },
         status: 500,
       }

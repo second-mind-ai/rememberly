@@ -456,10 +456,19 @@ export async function cancelNotification(notificationId: string): Promise<void> 
 
     if (Platform.OS === 'web') {
       if (notificationId.startsWith('web-') && !notificationId.includes('immediate')) {
-        const timeoutId = parseInt(notificationId.replace('web-', ''));
-        if (!isNaN(timeoutId)) {
-          clearTimeout(timeoutId);
-          console.log('✅ Web notification timeout cleared');
+        try {
+          const timeoutStr = notificationId.replace('web-', '');
+          const timeoutId = parseInt(timeoutStr, 10);
+
+          // Validate timeout ID is a valid number within safe integer range
+          if (!isNaN(timeoutId) && timeoutId > 0 && timeoutId <= Number.MAX_SAFE_INTEGER) {
+            clearTimeout(timeoutId);
+            console.log('✅ Web notification timeout cleared:', timeoutId);
+          } else {
+            console.warn('⚠️ Invalid timeout ID format:', notificationId);
+          }
+        } catch (error) {
+          console.error('❌ Error clearing web notification timeout:', error);
         }
       }
       return;

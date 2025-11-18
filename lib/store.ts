@@ -5,6 +5,18 @@ import { guestModeManager, GuestNote } from './guestMode';
 type DatabaseNote = Database['public']['Tables']['notes']['Row'];
 type Reminder = Database['public']['Tables']['reminders']['Row'];
 
+// Type-safe note updates interface
+interface NoteUpdates {
+  title?: string;
+  original_content?: string;
+  summary?: string;
+  type?: 'text' | 'url' | 'file' | 'image';
+  tags?: string[];
+  source_url?: string | null;
+  file_url?: string | null;
+  updated_at?: string;
+}
+
 interface NotesState {
   notes: (DatabaseNote | GuestNote)[];
   reminders: Reminder[];
@@ -22,7 +34,7 @@ interface NotesState {
   createReminder: (
     reminder: Omit<Reminder, 'id' | 'created_at'>
   ) => Promise<Reminder | null>;
-  updateNote: (id: string, updates: any) => Promise<void>;
+  updateNote: (id: string, updates: NoteUpdates) => Promise<void>;
   deleteNote: (id: string) => Promise<void>;
   completeReminder: (id: string) => Promise<void>;
   clearError: () => void;
